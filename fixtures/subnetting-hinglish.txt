@@ -1,0 +1,56 @@
+Okay so dekho, aaj we will do subnetting, and this is very important for the exam,
+har saal question aata hai. Attendance ho gayi? Theek hai, chalo shuru karte hain.
+
+So the question is, we have a network 192.168.10.0 and it is slash twenty six.
+Slash twenty six matlab cider notation, seedar notation, jisme the number after the
+slash tells you kitne bits are the network portion. Samajh gaye? So twenty six bits
+network ke liye hain.
+
+Now IPv4 address is how many bits total? Thirty two bits. Everyone knows this na.
+So agar twenty six network bits hain, then host bits will be thirty two minus twenty
+six. That gives us... five host bits. So write that down, five host bits.
+
+Ab block size nikalte hain. Block size is two raised to the power host bits. Two to
+the power five is thirty two. So block size thirty two hai. Yeh likh lo.
+
+Arre nahi nahi, wait. Sorry sorry, main galat bol raya hoon. Thirty two minus twenty
+six is six, not five. Six host bits. Maine galat likh diya board pe. Let me erase
+this. Six host bits hai, theek hai? So do that again, two to the power six, that is
+sixty four. Block size is sixty four. Correct karo apni copy mein.
+
+Okay so now the mask. Twenty six bits on hain, so first two octets are full,
+that is two fifty five dot two fifty five. Third octet also full, two fifty five.
+Ab fourth octet mein kitne bits bache? Twenty four bits already ho gaye teen octet
+mein, so twenty six minus twenty four is two bits in the fourth octet.
+
+Two bits on karo from left. So one one zero zero zero zero zero zero. That value is
+one twenty eight plus sixty four which is one ninety two. So the mask is two fifty
+five dot two fifty five dot two fifty five dot one ninety two.
+
+Haan ek aur cheez, ek shortcut. Mask ka last octet is always two fifty six minus
+block size. Two fifty six minus sixty four is one ninety two. Same answer aaya na?
+Yeh shortcut yaad rakhna, exam mein fast hai.
+
+Now subnets kitne banenge. Two raised to the power borrowed bits. Default for class
+C is twenty four, humne twenty six liya, so we borrowed two bits. Two to the power
+two is four subnets.
+
+And the subnet ranges. Start from zero and jump by block size. So zero, sixty four,
+one twenty eight, one ninety two. Chaar subnets, dekho, matches.
+
+Usable hosts per subnet, this is where students make mistake. It is two to the power
+host bits minus two. Two to the power six is sixty four, minus two, sixty two usable
+hosts. Minus two kyun? Because one address is the network ID and one is the
+broadcast address, woh assign nahi kar sakte kisi machine ko.
+
+Ek minute, wapas aata hoon block size pe. Maine bola tha thirty two initially, that
+was wrong, sixty four hai. Jinhone thirty two likha hai woh please correct kar lein.
+
+Ab last thing. Agar mujhe koi IP de de, jaise 192.168.10.100, and pooche ki iska
+network ID kya hai, then what you do is, round down to the nearest multiple of the
+block size. Hundred ko sixty four se divide karo, one point something aata hai, so
+round down to sixty four. Network ID is 192.168.10.64. Broadcast will be next block
+minus one, so one twenty eight minus one, that is 192.168.10.127. And usable range
+is sixty five to one twenty six.
+
+Theek hai? Koi doubt? Chalo next class mein VLSM karenge. Practice karke aana.

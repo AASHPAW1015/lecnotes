@@ -1,0 +1,15 @@
+#!/bin/bash
+# lecnote launcher. The invoked name picks the default mode:
+#   lecnote-notion / lecnote-obsidian / lecnote-excalidraw are symlinks to this.
+set -euo pipefail
+SELF="${BASH_SOURCE[0]}"
+INVOKED="$(basename "$0")"
+while [ -L "$SELF" ]; do
+  DIR="$(cd -P "$(dirname "$SELF")" && pwd)"
+  SELF="$(readlink "$SELF")"
+  [[ "$SELF" != /* ]] && SELF="$DIR/$SELF"
+done
+ROOT="$(cd -P "$(dirname "$SELF")/.." && pwd)"
+export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
+export LECNOTE_INVOKED_AS="$INVOKED"
+exec "$ROOT/.venv/bin/python" -m lecnote "$@"

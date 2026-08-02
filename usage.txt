@@ -1,0 +1,218 @@
+===============================================================================
+ lecnote — quick reference
+ Record a lecture, get clean pastable notes on the clipboard.
+===============================================================================
+
+-------------------------------------------------------------------------------
+ ONE-TIME SETUP
+-------------------------------------------------------------------------------
+
+  # put it on PATH — run this once, from anywhere
+  echo 'export PATH="/Users/aashpaw/WORKKKKKK/smth/tool/bin:$PATH"' >> ~/.zshrc
+  source ~/.zshrc
+
+  # check it worked
+  which lecnote        # -> /Users/aashpaw/WORKKKKKK/smth/tool/bin/lecnote
+
+  Until that is done, every command below still works with the full path:
+      /Users/aashpaw/WORKKKKKK/smth/tool/bin/lecnote doctor
+  `source ~/.zshrc` only affects the shell you run it in; other open terminal
+  tabs need it too, or just open a new tab.
+
+  # keys live in .env in the project root (chmod 600, gitignored)
+  GROQ_API_KEY=...        required  (speech-to-text)
+  ANTHROPIC_API_KEY=...   optional  (only if you have API credits)
+
+  Claude has no speech-to-text endpoint, so transcription needs Groq.
+  Notes work off EITHER API credits OR a Claude Pro/Max subscription —
+  a Pro plan does NOT fund the API, those are separate billing pools.
+  Default backend is "auto": tries the API, falls back to the claude CLI.
+
+  # check keys, microphone, AND transcription before relying on it
+  lecnote doctor
+      Speak when it says SPEAK NOW. It prints what Whisper heard, so you can
+      confirm Hinglish is coming through. Say something like
+      "mera naam hello hai" and check the words come back.
+
+
+-------------------------------------------------------------------------------
+ EVERYDAY USE
+-------------------------------------------------------------------------------
+
+  lecnote                      record now; press Enter to stop
+  lecnote run png              same, spelled out, with the mode
+  lecnote-notion               same, forces Notion markdown
+  lecnote-excalidraw           same, forces an Excalidraw diagram
+
+  lecnote toggle notion        start if idle, stop if recording   <- for hotkeys
+  lecnote start                start recording in the background
+  lecnote status               is anything recording?
+  lecnote stop                 stop, transcribe, write notes, copy
+
+  A notification fires when the notes hit the clipboard, so you do not have to
+  watch the terminal. Silence it with LECNOTE_NOTIFY=0.
+
+
+-------------------------------------------------------------------------------
+ OUTPUT MODES
+-------------------------------------------------------------------------------
+
+  notion       markdown: headings, tables, code blocks, checkboxes
+  obsidian     same, plus LaTeX, callouts, highlights
+  excalidraw   an editable diagram scene  (paste onto the Excalidraw canvas)
+  png          a rendered flowchart IMAGE (paste straight into Notion)
+
+  png vs excalidraw: same layout engine, same diagram. Use png when you want
+  the picture inside the note. Use excalidraw when you want to edit the shapes.
+
+  The mode is the last word of the command:
+
+    lecnote png
+    lecnote toggle excalidraw
+    lecnote redo notion
+
+
+-------------------------------------------------------------------------------
+ WORKING FROM FILES (no microphone)
+-------------------------------------------------------------------------------
+
+  lecnote file lecture.m4a              transcribe an audio file, then notes
+  lecnote file clip.mp3 png             ...and render it as a diagram image
+  lecnote text transcript.txt notion    notes from a transcript you already have
+
+  Audio formats: wav, mp3, m4a, ogg, flac, webm, mp4.
+
+
+-------------------------------------------------------------------------------
+ REUSING THE LAST LECTURE
+-------------------------------------------------------------------------------
+
+  lecnote redo excalidraw      re-render the last lecture in another format
+  lecnote redo png             ...as an image
+  lecnote transcript           print the last raw transcript
+
+  The transcript is cached per session, so `redo` costs one Claude call and
+  does NOT re-transcribe. Capture once, export to every format you want.
+
+
+-------------------------------------------------------------------------------
+ FLAGS
+-------------------------------------------------------------------------------
+
+  -v, --vocab "subnetting, CIDR"   subject hint. Improves both transcription
+                                   and note accuracy noticeably. Worth using.
+  -d, --device 1                   input device index (see `lecnote devices`)
+  -p, --show                       also print the notes to stdout
+      --keep                       keep the audio file after processing
+
+  Progress goes to stderr and notes to stdout, so this works:
+
+    lecnote text lecture.txt notion -p > notes.md
+
+
+-------------------------------------------------------------------------------
+ HOUSEKEEPING
+-------------------------------------------------------------------------------
+
+  lecnote clean                keep the 3 newest sessions, ask before deleting
+  lecnote clean --keep 10      keep more
+  lecnote clean --days 30      only delete sessions older than 30 days
+  lecnote clean --all          delete every session
+  lecnote clean -y             skip the confirmation
+
+  Shows what it will delete and the space freed before touching anything.
+  Never deletes a session that is actively recording.
+
+  lecnote devices              list audio inputs
+  lecnote doctor               check keys, record, and transcribe it back
+  lecnote doctor -s 10         record for 10 seconds instead of 6
+  lecnote doctor -d 1          use a specific input device
+  lecnote doctor --no-stt      only test the mic, skip transcription
+
+  doctor plays back what speech-to-text actually heard, so you can say
+  "mera naam hello hai" and check the Hinglish came through before trusting
+  it with a real lecture.
+
+
+-------------------------------------------------------------------------------
+ HOTKEY (RAYCAST)
+-------------------------------------------------------------------------------
+
+  Raycast > Extensions > Script Commands > Add Script Directory
+  Point it at the raycast/ folder in this repo. Four commands appear.
+  Give "Lecture Notes — Toggle (Notion)" a hotkey, e.g. Option+N.
+
+  One press starts recording, the next stops it and copies the notes.
+  The scripts locate the repo themselves, so nothing needs editing.
+
+  Raycast needs its OWN microphone permission, separate from your terminal's.
+
+
+-------------------------------------------------------------------------------
+ WHERE THINGS LIVE
+-------------------------------------------------------------------------------
+
+  ~/.lecnote/sessions/<timestamp>/     one folder per run
+      transcript.txt                   raw speech-to-text
+      notes-<mode>.md|.json|.png       the generated notes
+      meta.json                        duration, mode, subject hint
+  ~/.lecnote/current.json              set only while recording
+  ~/.lecnote/last.json                 what `redo` points at
+
+  Sessions live outside the project on purpose — lecture recordings are
+  personal data and should not sit in a folder you might commit.
+
+  Audio is deleted after processing unless you pass --keep.
+
+
+-------------------------------------------------------------------------------
+ ENVIRONMENT VARIABLES  (set in .env)
+-------------------------------------------------------------------------------
+
+  LECNOTE_BACKEND    auto | api | cli        how to reach Claude (default auto)
+  LECNOTE_MODEL      claude-sonnet-5         model for writing notes
+  LECNOTE_STT_MODEL  whisper-large-v3        model for transcription
+  LECNOTE_STT_LANG   en | hi                 "en" transliterates Hindi into
+                                             Latin script, "hi" gives Devanagari
+  LECNOTE_NOTIFY     0                       disable notifications
+
+
+-------------------------------------------------------------------------------
+ WHEN SOMETHING GOES WRONG
+-------------------------------------------------------------------------------
+
+  "the microphone recorded pure silence"
+      System Settings > Privacy & Security > Microphone > enable your terminal
+      (or Raycast), then FULLY quit and reopen it. Verify with `lecnote doctor`.
+
+  "credit balance is too low"
+      Your Anthropic API balance is empty. A Pro/Max subscription does not fund
+      the API. Either add credits, or let the default "auto" backend fall back
+      to the claude CLI — which is what it already does.
+
+  "GROQ_API_KEY not set"
+      Transcription needs it. Free key at https://console.groq.com/keys
+
+  Notes came out wrong / missed something
+      The transcript is saved. Check it with `lecnote transcript` to see whether
+      the mic missed it or the model did. If the mic heard it correctly, the fix
+      is in lecnote/prompts.py. Then `lecnote redo` — no re-recording needed.
+
+  A run failed partway
+      Nothing is lost. The transcript is already on disk, so `lecnote redo`
+      picks up from there without re-transcribing.
+
+
+-------------------------------------------------------------------------------
+ TYPICAL LECTURE
+-------------------------------------------------------------------------------
+
+  Option+N                     (or: lecnote toggle notion)
+  ... lecture happens, you keep writing your own notes ...
+  Option+N                     stops; notification when ready
+  Cmd+V in Notion
+
+  Then, if a diagram would help:
+
+  lecnote redo png             re-renders the same lecture as a flowchart
+  Cmd+V in Notion

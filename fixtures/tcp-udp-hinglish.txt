@@ -1,0 +1,61 @@
+Haan toh good morning everyone. Aaj hum transport layer karenge, TCP aur UDP, and
+this is guaranteed question in the exam, five marks ka. Roll number bol do jaldi se.
+Chalo theek hai, shuru.
+
+So transport layer is which layer in OSI? Layer four. Uske upar session layer hai,
+neeche network layer. Network layer mein IP hota hai, transport mein TCP and UDP.
+
+Pehle TCP dekhte hain. TCP means Transmission Control Protocol. Yeh connection
+oriented hai. Connection oriented matlab pehle connection banega, phir data jayega.
+Jaise phone call, pehle ring hoti hai, uthate ho, phir baat karte ho.
+
+Ab connection kaise banta hai. Yeh hota hai four way handshake. Client sends SYN,
+server sends SYN ACK, client sends ACK, and then server sends one more ACK. So four
+steps.
+
+Nahi nahi, ek minute. Sorry, yeh galat hai. Main confuse ho gaya, four way handshake
+toh connection close karne ke liye hota hai. Connection banane ke liye it is three
+way handshake. Teen steps. Board se hata deta hoon.
+
+So again, three way handshake. Step one, client sends SYN with a sequence number,
+maan lo x. Step two, server replies with SYN plus ACK, uska apna sequence number y,
+and acknowledgement x plus one. Step three, client sends ACK with y plus one. Bas,
+connection established. Teen steps, yaad rakhna.
+
+Ab UDP. User Datagram Protocol. Connectionless hai. Koi handshake nahi, seedha data
+bhej deta hai. Jaise postcard, daal diya, pahuncha ki nahi pata nahi.
+
+Ab comparison, yeh table bana lo copy mein, exam mein aata hai. TCP reliable hai,
+UDP unreliable. TCP ordered delivery deta hai, UDP mein order guarantee nahi.
+TCP mein flow control hai using sliding window, UDP mein bhi flow control hota hai.
+
+Arre nahi, UDP mein flow control nahi hota. Maine galat bola. UDP has no flow
+control, no congestion control, kuch nahi. Woh TCP ki speciality hai. Correct kar lo.
+
+Header size bhi important hai. TCP header is twenty bytes minimum. UDP header is
+only eight bytes. Isiliye UDP fast hai, kam overhead.
+
+Speed ke hisab se, UDP faster because no acknowledgement waiting. TCP slower but
+reliable. Use case, TCP for email, file transfer, web browsing. UDP for video
+streaming, gaming, DNS, voice call. Kyunki wahan thoda packet loss chalega, but
+delay nahi chalega.
+
+Ab port numbers. Yeh ratte maar ke yaad karo, direct question aata hai. FTP is
+twenty and twenty one. SSH is twenty two. Telnet is twenty three. SMTP is twenty
+five. DNS is fifty three. HTTP is eighty. HTTPS is four four three.
+
+Ek second, DNS ke baare mein ek important baat. DNS uses UDP on port fifty three
+normally, but for zone transfer it uses TCP. Yeh trick question aata hai exam mein.
+
+Practical bhi dekh lo. Terminal mein type karo netstat minus a n, it shows all
+active connections with port numbers. Ubuntu mein ss minus t u l n bhi kar sakte ho,
+that is the newer command. And to check a specific port, use lsof minus i colon
+eighty.
+
+Ek aur cheez. Well known ports are zero to one zero two three. Registered ports one
+zero two four to four nine one five one. Dynamic ports uske baad, forty nine one
+five two to sixty five five three five.
+
+Assignment ke liye, three way handshake ka diagram banao, TCP versus UDP ka table
+banao, aur port numbers yaad karke aao. Next class mein congestion control karenge,
+slow start aur all that. Theek hai, doubt? Chalo.
