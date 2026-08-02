@@ -10,6 +10,14 @@ while [ -L "$SELF" ]; do
   [[ "$SELF" != /* ]] && SELF="$DIR/$SELF"
 done
 ROOT="$(cd -P "$(dirname "$SELF")/.." && pwd)"
+# Raycast, Finder and launchd start us with a minimal PATH that has no Homebrew,
+# so `claude` (the notes backend) would look uninstalled. Append the usual spots
+# rather than prepend, so a caller's own PATH still wins.
+export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin"
+# Those same launchers can also drop USER/SHELL, and without them the claude CLI
+# cannot find its login and reports "Not logged in". Derive rather than guess.
+export USER="${USER:-$(id -un)}"
+export SHELL="${SHELL:-/bin/zsh}"
 export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export LECNOTE_INVOKED_AS="$INVOKED"
 exec "$ROOT/.venv/bin/python" -m lecnote "$@"
