@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lecnote"
-version = "0.1.0"
+# Single-sourced from lecnote/__init__.py so the two cannot drift.
+dynamic = ["version"]
 description = "Record a lecture, get pastable notes on the clipboard."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,3 +33,6 @@ lecnote-excalidraw = "lecnote.cli:main"
 
 [tool.setuptools]
 packages = ["lecnote"]
+
+[tool.setuptools.dynamic]
+version = { attr = "lecnote.__version__" }

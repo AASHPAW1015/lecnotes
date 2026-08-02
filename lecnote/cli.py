@@ -20,7 +20,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from . import clipboard, config, notes, notify, prompts, recorder
+from . import __version__, clipboard, config, notes, notify, prompts, recorder
 
 MODES = list(prompts.MODES)
 DEFAULT_MODE = "notion"
@@ -504,6 +504,8 @@ def build_parser(default_mode: str) -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
+    parser.add_argument("--version", action="version",
+                        version=f"lecnote {__version__}")
 
     def common(sub):
         sub.add_argument("-v", "--vocab", default="",
