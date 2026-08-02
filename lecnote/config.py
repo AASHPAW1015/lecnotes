@@ -15,13 +15,18 @@ CHANNELS = 1
 # Whisper APIs cap uploads at 25MB; stay under it.
 MAX_UPLOAD_BYTES = 24 * 1024 * 1024
 
-# Models
-NOTES_MODEL = os.environ.get("LECNOTE_MODEL", "claude-sonnet-5")
+# Models. Blank override means "use whatever the chosen CLI defaults to", since a
+# Claude model name is meaningless to the codex or gemini CLI.
+MODEL_OVERRIDE = os.environ.get("LECNOTE_MODEL", "")
+NOTES_MODEL = MODEL_OVERRIDE or "claude-sonnet-5"
 
-# How to reach Claude: "api" (prepaid API credits), "cli" (the `claude` command,
-# billed to a Pro/Max subscription), or "auto" (API, falling back to CLI when the
-# API credit balance is empty). A Pro subscription does not fund the API.
+# How to reach a model: "api" (prepaid Anthropic API credits), "cli" (a vendor's
+# coding CLI, billed to a chat subscription), or "auto" (API, falling back to the
+# CLI when the API credit balance is empty). A Pro subscription does not fund the API.
 BACKEND = os.environ.get("LECNOTE_BACKEND", "auto")
+
+# Which CLI the "cli" backend drives: claude, codex or gemini. See notes.CLI_BACKENDS.
+NOTES_CLI = os.environ.get("LECNOTE_CLI", "claude")
 STT_MODEL = os.environ.get("LECNOTE_STT_MODEL", "whisper-large-v3")
 
 # Hinglish: "en" makes Whisper transliterate Hindi into Latin script instead of
@@ -45,7 +50,30 @@ def _load_env_file(path: Path) -> None:
             os.environ[key] = val
 
 
+def _harden_env() -> None:
+    """Repair the environment when launched by Raycast, Finder, launchd or cron.
+
+    Those start us with a minimal environment rather than a login shell: PATH has
+    no Homebrew (so the notes CLI looks uninstalled) and USER/SHELL may be unset
+    (so that CLI cannot find its login and reports "Not logged in"). bin/lecnote
+    does this too, but pip-installed entry points do not go through it.
+    """
+    extra = ["/opt/homebrew/bin", "/usr/local/bin", str(Path.home() / ".local/bin")]
+    path = os.environ.get("PATH", "")
+    missing = [p for p in extra if p not in path.split(":")]
+    if missing:  # append, so a caller's own PATH still wins
+        os.environ["PATH"] = ":".join(filter(None, [path, *missing]))
+    if not os.environ.get("USER"):
+        try:
+            os.environ["USER"] = os.getlogin()
+        except OSError:
+            import pwd
+            os.environ["USER"] = pwd.getpwuid(os.getuid()).pw_name
+    os.environ.setdefault("SHELL", "/bin/zsh")
+
+
 def load() -> None:
+    _harden_env()
     _load_env_file(PROJECT_ROOT / ".env")
     _load_env_file(HOME / ".env")
 
@@ -60,15 +88,17 @@ def require(name: str, hint: str) -> str:
 def anthropic_key() -> str:
     return require(
         "ANTHROPIC_API_KEY",
-        "Add it to .env in the project root, or export it in your shell.",
+        f"Add it to {HOME / '.env'} (or .env in the project root), or export it.\n"
+        "  No API credits? Set LECNOTE_BACKEND=cli to bill a chat subscription instead.",
     )
 
 
 def groq_key() -> str:
     return require(
         "GROQ_API_KEY",
-        "Get a free key at https://console.groq.com/keys, then add GROQ_API_KEY to .env.\n"
-        "  (Claude has no speech-to-text endpoint, so transcription needs a separate provider.)",
+        "Get a free key at https://console.groq.com/keys, then add it to\n"
+        f"  {HOME / '.env'} as GROQ_API_KEY=...\n"
+        "  Transcription always needs this: no chat subscription covers speech-to-text.",
     )
 
 

@@ -7,6 +7,12 @@
  ONE-TIME SETUP
 -------------------------------------------------------------------------------
 
+  # already installed on this machine — this section is for a fresh one.
+  # simplest, anywhere:
+  #     pip install git+https://github.com/AASHPAW1015/lecnotes.git
+  # from a clone, keeping the venv:
+  #     python3 -m venv .venv && .venv/bin/pip install -e .
+
   # put it on PATH — run this once, from anywhere
   echo 'export PATH="/Users/aashpaw/WORKKKKKK/smth/tool/bin:$PATH"' >> ~/.zshrc
   source ~/.zshrc
@@ -19,20 +25,82 @@
   `source ~/.zshrc` only affects the shell you run it in; other open terminal
   tabs need it too, or just open a new tab.
 
-  # keys live in .env in the project root (chmod 600, gitignored)
-  GROQ_API_KEY=...        required  (speech-to-text)
-  ANTHROPIC_API_KEY=...   optional  (only if you have API credits)
-
-  Claude has no speech-to-text endpoint, so transcription needs Groq.
-  Notes work off EITHER API credits OR a Claude Pro/Max subscription —
-  a Pro plan does NOT fund the API, those are separate billing pools.
-  Default backend is "auto": tries the API, falls back to the claude CLI.
-
   # check keys, microphone, AND transcription before relying on it
   lecnote doctor
       Speak when it says SPEAK NOW. It prints what Whisper heard, so you can
       confirm Hinglish is coming through. Say something like
       "mera naam hello hai" and check the words come back.
+
+
+-------------------------------------------------------------------------------
+ API KEYS
+-------------------------------------------------------------------------------
+
+  Keys are read from BOTH of these; whichever exists wins, env vars beat files:
+
+      ~/.lecnote/.env          works no matter how lecnote was installed
+      <project root>/.env      only when running from a clone
+
+  Create one:
+
+      mkdir -p ~/.lecnote
+      chmod 700 ~/.lecnote
+      printf 'GROQ_API_KEY=gsk_...\n' >> ~/.lecnote/.env
+      chmod 600 ~/.lecnote/.env
+
+  GROQ_API_KEY          REQUIRED, always.  https://console.groq.com/keys
+  ANTHROPIC_API_KEY     optional — only if you have prepaid API credits.
+
+  Why Groq is not optional:
+      Transcription needs a speech-to-text model. NO chat subscription
+      includes one — not Claude Pro, not ChatGPT Plus, not Google AI Pro.
+      None of those expose an audio endpoint. Groq's free tier is generous
+      and covers normal lecture use.
+
+  Never commit either key. `.env` is gitignored; ~/.lecnote/.env is outside
+  the repo entirely, which is why it is the better place for it.
+
+
+-------------------------------------------------------------------------------
+ USING A SUBSCRIPTION INSTEAD OF API CREDITS
+-------------------------------------------------------------------------------
+
+  The NOTES step (not transcription) can run on a chat subscription you
+  already pay for, by driving that vendor's coding CLI in headless mode.
+
+  A Claude Pro/Max plan does NOT fund the Anthropic API — separate billing
+  pools. That is why a valid ANTHROPIC_API_KEY can still say
+  "credit balance is too low".
+
+  LECNOTE_BACKEND    api    Anthropic API, needs prepaid credits
+                     cli    a coding CLI, billed to a subscription
+                     auto   (default) API first, falls back to cli
+
+  LECNOTE_CLI        claude   Claude Pro / Max            (default)
+                     codex    ChatGPT Plus / Pro
+                     gemini   Google AI Pro / free tier
+
+  Set it up:
+
+      # 1. install and sign in ONCE, in a terminal
+      #    claude -> https://claude.com/claude-code
+      #    codex  -> npm i -g @openai/codex   && codex login
+      #    gemini -> npm i -g @google/gemini-cli && gemini
+
+      # 2. point lecnote at it
+      printf 'LECNOTE_BACKEND=cli\nLECNOTE_CLI=codex\n' >> ~/.lecnote/.env
+
+  lecnote reuses that browser login and strips any conflicting API key from
+  the child process — an API key in the environment would otherwise take
+  priority and quietly bill the wrong pool.
+
+  Each CLI's own default model is used; override with LECNOTE_MODEL.
+
+  So: a free Groq key + any ONE of those subscriptions = no per-lecture spend.
+
+  Tested here: claude only. codex and gemini are written to their documented
+  headless flags but have not been run. If a vendor changes flags, fix one
+  entry in CLI_BACKENDS in lecnote/notes.py.
 
 
 -------------------------------------------------------------------------------
@@ -84,15 +152,21 @@
 
 
 -------------------------------------------------------------------------------
- REUSING THE LAST LECTURE
+ REUSING A CAPTURED LECTURE
 -------------------------------------------------------------------------------
 
-  lecnote redo excalidraw      re-render the last lecture in another format
-  lecnote redo png             ...as an image
+  lecnote sessions             list captured lectures, numbered
+  lecnote redo excalidraw      re-render the MOST RECENT in another format
+  lecnote redo png --session 3 ...an older one, by number or name prefix
   lecnote transcript           print the last raw transcript
+  lecnote transcript --session 3
 
-  The transcript is cached per session, so `redo` costs one Claude call and
-  does NOT re-transcribe. Capture once, export to every format you want.
+  The transcript is cached per session, so `redo` costs one model call and
+  does NOT re-transcribe. Capture once, export to every format you want —
+  one recording can end up as md + Excalidraw + PNG in the same folder.
+
+  `sessions` shows length, which formats already exist, the subject hint and
+  the opening line, so lectures are tellable apart without opening them.
 
 
 -------------------------------------------------------------------------------
@@ -139,13 +213,27 @@
 -------------------------------------------------------------------------------
 
   Raycast > Extensions > Script Commands > Add Script Directory
-  Point it at the raycast/ folder in this repo. Four commands appear.
-  Give "Lecture Notes — Toggle (Notion)" a hotkey, e.g. Option+N.
+  Point it at the raycast/ folder in this repo. Five commands appear:
 
+      Toggle (Notion)       start / stop + copy notes
+      Toggle (Excalidraw)   same, as a diagram scene
+      Re-render             a captured lecture in another format
+      Sessions              list captured lectures
+      Status                recording or idle
+
+  Give "Lecture Notes — Toggle (Notion)" a hotkey, e.g. Option+Cmd+L.
   One press starts recording, the next stops it and copies the notes.
+  That single key is the whole tool during a lecture.
+
   The scripts locate the repo themselves, so nothing needs editing.
 
   Raycast needs its OWN microphone permission, separate from your terminal's.
+  If a run reports silence, allow Raycast under
+  System Settings > Privacy & Security > Microphone.
+
+  Raycast starts scripts with a minimal environment, not a login shell, so
+  the notes CLI would be unfindable on PATH and unable to locate its login.
+  lecnote repairs that itself at startup — Finder, launchd and cron too.
 
 
 -------------------------------------------------------------------------------

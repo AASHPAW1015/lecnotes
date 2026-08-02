@@ -91,38 +91,93 @@ def _via_api(system: str, user: str) -> str:
     return "".join(chunks)
 
 
-def _via_cli(system: str, user: str) -> str:
-    """Headless `claude -p`. Bills against the Pro/Max subscription, not API credits."""
-    exe = shutil.which("claude")
-    if not exe:
-        raise SystemExit(
-            "error: the `claude` CLI is not installed, and the API has no credits.\n"
-            "  Install it (https://claude.com/claude-code) or add API credits at\n"
-            "  https://console.anthropic.com/settings/billing")
-
-    print(f"  writing notes with {config.NOTES_MODEL} (claude CLI)...", file=sys.stderr)
-    cmd = [
+def _claude_argv(exe: str, model: str, system: str) -> list[str]:
+    return [
         exe, "-p",
-        "--model", config.NOTES_MODEL,
+        "--model", model,
         "--system-prompt", system,
         "--output-format", "text",
         "--exclude-dynamic-system-prompt-sections",
         "--disallowed-tools", ",".join(_NO_TOOLS),
     ]
-    # An ANTHROPIC_API_KEY in the environment takes precedence over the claude.ai
-    # login, which is exactly backwards here — the whole point of this backend is
-    # to use the subscription. Drop it for the child only.
-    env = {k: v for k, v in os.environ.items()
-           if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
 
-    # Run somewhere empty so no CLAUDE.md or repo context leaks into the notes.
+
+def _codex_argv(exe: str, model: str, _system: str) -> list[str]:
+    # No dedicated system-prompt flag, so the system text is folded into stdin
+    # by _via_cli. `--skip-git-repo-check` matters because we run in a temp dir.
+    return [exe, "exec", "--model", model, "--skip-git-repo-check", "-"]
+
+
+def _gemini_argv(exe: str, model: str, _system: str) -> list[str]:
+    return [exe, "--model", model]
+
+
+# Any CLI that can be driven non-interactively works here. `folds_system` says the
+# CLI has no system-prompt flag, so the system text is prepended to stdin instead.
+# `drops` names env vars that would make the CLI bill an API key rather than the
+# subscription this backend exists to use.
+CLI_BACKENDS = {
+    "claude": {
+        "argv": _claude_argv, "model": "claude-sonnet-5", "folds_system": False,
+        "drops": ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"),
+        "install": "https://claude.com/claude-code",
+    },
+    "codex": {
+        "argv": _codex_argv, "model": "gpt-5.1-codex", "folds_system": True,
+        "drops": ("OPENAI_API_KEY",),
+        "install": "npm i -g @openai/codex, then `codex login` with your ChatGPT plan",
+    },
+    "gemini": {
+        "argv": _gemini_argv, "model": "gemini-2.5-pro", "folds_system": True,
+        "drops": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+        "install": "npm i -g @google/gemini-cli, then `gemini` once to sign in",
+    },
+}
+
+
+def _via_cli(system: str, user: str) -> str:
+    """Drive a vendor's coding CLI in headless mode.
+
+    These bill against a chat subscription (Claude Pro/Max, ChatGPT Plus/Pro,
+    Google AI Pro) rather than prepaid API credits, so they are the cheap path
+    for anyone who already pays for one.
+    """
+    name = config.NOTES_CLI
+    spec = CLI_BACKENDS.get(name)
+    if spec is None:
+        raise SystemExit(f"error: unknown LECNOTE_CLI '{name}' "
+                         f"(have: {', '.join(CLI_BACKENDS)})")
+
+    exe = shutil.which(name)
+    if not exe:
+        raise SystemExit(
+            f"error: the `{name}` CLI is not installed, and the API has no credits.\n"
+            f"  Install it: {spec['install']}\n"
+            f"  Or pick another with LECNOTE_CLI ({', '.join(CLI_BACKENDS)}),\n"
+            "  or add API credits at https://console.anthropic.com/settings/billing")
+
+    model = config.MODEL_OVERRIDE or spec["model"]
+    print(f"  writing notes with {model} ({name} CLI)...", file=sys.stderr)
+
+    stdin = f"{system}\n\n---\n\n{user}" if spec["folds_system"] else user
+    cmd = spec["argv"](exe, model, system)
+
+    # An API key in the environment takes precedence over the browser login,
+    # which is exactly backwards here. Drop it for the child only.
+    env = {k: v for k, v in os.environ.items() if k not in spec["drops"]}
+
+    # Run somewhere empty so no CLAUDE.md, AGENTS.md or repo context leaks in.
     with tempfile.TemporaryDirectory() as cwd:
-        proc = subprocess.run(cmd, input=user, capture_output=True, text=True,
+        proc = subprocess.run(cmd, input=stdin, capture_output=True, text=True,
                               cwd=cwd, env=env, timeout=CLI_TIMEOUT, check=False)
     if proc.returncode != 0:
-        raise SystemExit(f"error: claude CLI failed ({proc.returncode})\n{proc.stderr[:500]}")
+        detail = (proc.stderr or proc.stdout)[:500]
+        hint = ""
+        if "login" in detail.lower() or "not logged in" in detail.lower():
+            hint = f"\n  Run `{name}` once in a terminal and sign in, then retry."
+        raise SystemExit(f"error: {name} CLI failed ({proc.returncode})\n{detail}{hint}")
     if not proc.stdout.strip():
-        raise SystemExit("error: claude CLI returned nothing.")
+        raise SystemExit(f"error: {name} CLI returned nothing.")
     return proc.stdout
 
 

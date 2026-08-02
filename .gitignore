@@ -5,3 +5,6 @@ __pycache__/
 .claude/settings.local.json
 .DS_Store
 conversation.md
+build/
+dist/
+*.egg-info/

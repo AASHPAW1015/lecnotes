@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lecnote"
+version = "0.1.0"
+description = "Record a lecture, get pastable notes on the clipboard."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "AASHPAW1015" }]
+keywords = ["lecture", "notes", "transcription", "whisper", "claude", "excalidraw"]
+
+dependencies = [
+    "sounddevice>=0.5",
+    "soundfile>=0.13",
+    "anthropic>=0.60",
+    "httpx>=0.27",
+    "Pillow>=10",
+]
+
+[project.urls]
+Homepage = "https://github.com/AASHPAW1015/lecnotes"
+
+# The invoked name picks the default output mode, which is why there are four.
+[project.scripts]
+lecnote = "lecnote.cli:main"
+lecnote-notion = "lecnote.cli:main"
+lecnote-obsidian = "lecnote.cli:main"
+lecnote-excalidraw = "lecnote.cli:main"
+
+[tool.setuptools]
+packages = ["lecnote"]
