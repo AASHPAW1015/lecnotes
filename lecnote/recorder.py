@@ -15,6 +15,12 @@ import soundfile as sf
 
 from . import config
 
+# Encode and split in blocks rather than one call. libsndfile's Vorbis encoder
+# builds per-call scratch on the stack, so handing it a whole lecture at once
+# (6M+ frames) overflows the stack and takes the process down with SIGSEGV —
+# uncatchable, so the fallback below never got a chance to run. ~4s at 16 kHz.
+BLOCK = 1 << 16
+
 
 class Recorder:
     """Streams mic input into a WAV file until stopped."""
@@ -86,10 +92,15 @@ def compress(wav_path: Path) -> Path:
     """
     ogg_path = wav_path.with_suffix(".ogg")
     try:
-        data, sr = sf.read(str(wav_path), dtype="float32")
-        sf.write(str(ogg_path), data, sr, format="OGG", subtype="VORBIS")
+        with sf.SoundFile(str(wav_path)) as src:
+            with sf.SoundFile(str(ogg_path), "w", samplerate=src.samplerate,
+                              channels=src.channels, format="OGG",
+                              subtype="VORBIS") as dst:
+                for block in src.blocks(blocksize=BLOCK, dtype="float32"):
+                    dst.write(block)
     except Exception as e:  # noqa: BLE001 - fall back to raw WAV upload
         print(f"  note: compression unavailable ({e}); uploading WAV", file=sys.stderr)
+        ogg_path.unlink(missing_ok=True)
         return wav_path
     if ogg_path.stat().st_size >= wav_path.stat().st_size:
         ogg_path.unlink(missing_ok=True)
@@ -106,20 +117,30 @@ def split(path: Path, max_bytes: int = config.MAX_UPLOAD_BYTES) -> list[Path]:
     total = duration(path)
     parts = int(size // max_bytes) + 1
     chunk_secs = total / parts
-    data, sr = sf.read(str(path), dtype="float32")
 
     out: list[Path] = []
-    for i in range(parts):
-        start = int(i * chunk_secs * sr)
-        end = int(min((i + 1) * chunk_secs * sr, len(data)))
-        if start >= end:
-            continue
-        chunk = path.with_name(f"{path.stem}.part{i:02d}{path.suffix}")
-        if path.suffix == ".ogg":
-            sf.write(str(chunk), data[start:end], sr, format="OGG", subtype="VORBIS")
-        else:
-            sf.write(str(chunk), data[start:end], sr, subtype="PCM_16")
-        out.append(chunk)
+    with sf.SoundFile(str(path)) as src:
+        sr = src.samplerate
+        is_ogg = path.suffix == ".ogg"
+        kwargs = ({"format": "OGG", "subtype": "VORBIS"} if is_ogg
+                  else {"subtype": "PCM_16"})
+        for i in range(parts):
+            start = int(i * chunk_secs * sr)
+            end = int(min((i + 1) * chunk_secs * sr, src.frames))
+            if start >= end:
+                continue
+            chunk = path.with_name(f"{path.stem}.part{i:02d}{path.suffix}")
+            src.seek(start)
+            remaining = end - start
+            with sf.SoundFile(str(chunk), "w", samplerate=sr,
+                              channels=src.channels, **kwargs) as dst:
+                while remaining > 0:
+                    block = src.read(min(BLOCK, remaining), dtype="float32")
+                    if not len(block):
+                        break
+                    dst.write(block)
+                    remaining -= len(block)
+            out.append(chunk)
     return out
 
 
