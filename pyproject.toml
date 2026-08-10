@@ -10,7 +10,7 @@ description = "Record a lecture, get pastable notes on the clipboard."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "AASHPAW1015" }]
+authors = [{ name = "Aashpaw" }]
 keywords = ["lecture", "notes", "transcription", "whisper", "claude", "excalidraw"]
 
 dependencies = [
