@@ -30,7 +30,16 @@ _NO_TOOLS = ["Bash", "Read", "Write", "Edit", "Glob", "Grep",
              "WebFetch", "WebSearch", "Task", "TodoWrite", "NotebookEdit"]
 
 
-class OutOfCredits(RuntimeError):
+class ApiUnavailable(RuntimeError):
+    """The API cannot serve this request, but another backend might.
+
+    Anything raised as this is a reason to try the CLI rather than to give up:
+    no key, a rejected key, an exhausted balance. Errors that a different
+    backend would not fix (a bad model name, a malformed request) are not.
+    """
+
+
+class OutOfCredits(ApiUnavailable):
     pass
 
 
@@ -48,13 +57,19 @@ def generate(transcript: str, mode: str, vocab: str = "",
         raw = _via_cli(system, user)
     elif backend == "api":
         config.anthropic_key()  # explicit backend: fail loudly on a missing key
-        raw = _via_api(system, user)
+        try:
+            raw = _via_api(system, user)
+        except ApiUnavailable as e:
+            raise SystemExit(
+                f"error: {e}.\n"
+                "  Check the key at https://console.anthropic.com/settings/keys,\n"
+                "  or set LECNOTE_BACKEND=cli to bill a subscription instead.") from None
     elif backend == "auto":
         try:
             raw = _via_api(system, user)
-        except OutOfCredits as e:
-            print(f"  API unavailable ({e}); using the claude CLI (subscription) instead",
-                  file=sys.stderr)
+        except ApiUnavailable as e:
+            print(f"  API unavailable ({e}); using the {config.NOTES_CLI} CLI "
+                  "(subscription) instead", file=sys.stderr)
             raw = _via_cli(system, user)
     else:
         raise SystemExit(f"error: unknown backend '{backend}' (use auto, api, or cli)")
@@ -70,7 +85,7 @@ def generate(transcript: str, mode: str, vocab: str = "",
 def _via_api(system: str, user: str) -> str:
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
-        raise OutOfCredits("no ANTHROPIC_API_KEY")
+        raise ApiUnavailable("no ANTHROPIC_API_KEY")
     client = anthropic.Anthropic(api_key=key)
     print(f"  writing notes with {config.NOTES_MODEL} (API)...", file=sys.stderr)
     chunks: list[str] = []
@@ -87,6 +102,10 @@ def _via_api(system: str, user: str) -> str:
     except anthropic.APIStatusError as e:
         if e.status_code == 400 and "credit balance" in str(getattr(e, "body", e)).lower():
             raise OutOfCredits("credit balance empty") from None
+        # A revoked, rotated or mistyped key is as recoverable as an empty
+        # balance — the subscription CLI can still do the work.
+        if e.status_code in (401, 403):
+            raise ApiUnavailable("ANTHROPIC_API_KEY rejected") from None
         raise SystemExit(_explain(e)) from None
     return "".join(chunks)
 

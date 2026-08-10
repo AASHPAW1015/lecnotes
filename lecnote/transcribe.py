@@ -14,6 +14,14 @@ from . import config, recorder
 
 GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 
+
+class SttRejected(RuntimeError):
+    """Provider refused the request for a reason the user can fix and retry.
+
+    Raised from the per-chunk call, which only knows about a temporary chunk;
+    run() catches it and names the real recording in the retry hint.
+    """
+
 MIME = {
     ".wav": "audio/wav",
     ".ogg": "audio/ogg",
@@ -49,6 +57,12 @@ def _groq_chunk(path: Path, prompt: str, language: str) -> str:
             timeout=300.0,
         )
 
+    if resp.status_code in (401, 403):
+        raise SttRejected("the Groq API key was rejected — most likely expired.\n"
+                          "  Get a fresh one (free) at https://console.groq.com/keys and replace\n"
+                          f"  GROQ_API_KEY in {config.HOME / '.env'} or the project .env")
+    if resp.status_code == 429:
+        raise SttRejected("Groq rate limit reached. Wait a minute before retrying")
     if resp.status_code != 200:
         raise SystemExit(f"error: Groq transcription failed ({resp.status_code})\n{resp.text[:500]}")
     return resp.text.strip()
@@ -91,4 +105,10 @@ def run(audio: Path, vocab: str = "", backend: str = "groq") -> str:
     size_mb = audio.stat().st_size / 1e6
     print(f"  transcribing {audio.name} ({size_mb:.1f} MB) via {backend}/{config.STT_MODEL}...",
           file=sys.stderr)
-    return fn(audio, vocab)
+    try:
+        return fn(audio, vocab)
+    except SttRejected as e:
+        # The recording is already on disk, so this never costs a re-record.
+        raise SystemExit(f"error: {e}.\n"
+                         "  Nothing is lost — the audio is saved. Finish it with:\n"
+                         f"    lecnote file {audio}") from None
