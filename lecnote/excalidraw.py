@@ -125,12 +125,46 @@ def build_scene(spec: dict) -> dict:
     return {"type": "excalidraw/clipboard", "elements": elements, "files": {}}
 
 
-def to_clipboard_json(spec: dict) -> str:
-    return json.dumps(build_scene(spec), ensure_ascii=False)
+GAP = 160  # blank canvas between diagrams pasted as one scene
 
 
-def parse_spec(raw: str) -> dict:
-    """Pull the JSON spec out of the model's reply, fences or not."""
+def to_clipboard_json(specs) -> str:
+    """One scene holding every diagram, laid out left to right.
+
+    Excalidraw pastes a scene as a unit, so several procedures arrive as
+    separate flowcharts on the canvas from a single paste.
+    """
+    if isinstance(specs, dict):
+        specs = [specs]
+
+    scene = None
+    elements: list[dict] = []
+    x_off = 0.0
+    for spec in specs:
+        built = build_scene(spec)
+        scene = scene or built
+        els = built["elements"]
+        if not els:
+            continue
+        left = min(e["x"] for e in els)
+        right = max(e["x"] + e.get("width", 0) for e in els)
+        shift = x_off - left
+        for e in els:
+            e["x"] += shift  # arrow "points" are relative, so only x moves
+        elements += els
+        x_off += (right - left) + GAP
+
+    scene = scene or build_scene(specs[0])
+    scene["elements"] = elements
+    return json.dumps(scene, ensure_ascii=False)
+
+
+def parse_specs(raw: str) -> list[dict]:
+    """Diagram specs from the model's reply, fences or not.
+
+    Accepts the current {"diagrams": [...]} shape and a bare single diagram,
+    so a model that ignores the wrapper still produces something usable.
+    """
     text = raw.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else text
@@ -139,4 +173,17 @@ def parse_spec(raw: str) -> dict:
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end == -1:
         raise ValueError(f"no JSON object in model output:\n{raw[:400]}")
-    return json.loads(text[start:end + 1])
+    obj = json.loads(text[start:end + 1])
+
+    specs = obj.get("diagrams") if isinstance(obj, dict) else None
+    if not specs:
+        specs = [obj]
+    specs = [s for s in specs if s.get("nodes")]
+    if not specs:
+        raise ValueError("no diagram in model output had any nodes")
+    return specs
+
+
+def parse_spec(raw: str) -> dict:
+    """First diagram only. Kept for callers that want exactly one."""
+    return parse_specs(raw)[0]

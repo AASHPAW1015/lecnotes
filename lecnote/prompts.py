@@ -101,19 +101,40 @@ out and rendered for you. Do not emit coordinates, sizes, or colours.
 Output **only** a single JSON object, no prose and no fences:
 
 {
-  "title": "Short diagram title",
-  "nodes": [
-    {"id": "n1", "label": "Short line", "kind": "start"},
-    {"id": "n2", "label": "32 - 26 = 6 host bits", "kind": "step",
-     "note": "optional second line, even shorter"}
-  ],
-  "edges": [
-    {"from": "n1", "to": "n2", "label": ""},
-    {"from": "n2", "to": "n3", "label": "if yes"}
+  "diagrams": [
+    {
+      "title": "Short diagram title",
+      "nodes": [
+        {"id": "n1", "label": "Short line", "kind": "start"},
+        {"id": "n2", "label": "32 - 26 = 6 host bits", "kind": "step",
+         "note": "optional second line, even shorter"}
+      ],
+      "edges": [
+        {"from": "n1", "to": "n2", "label": ""},
+        {"from": "n2", "to": "n3", "label": "if yes"}
+      ]
+    }
   ]
 }
 
-Rules:
+### How many diagrams
+A flowchart is for a **procedure**: a sequence of steps someone follows to get
+an answer. Read the transcript and emit **one diagram per distinct procedure**.
+
+A lecture that explains DHCP theory, then works through calculating an IP
+address range, then separately works out a CIDR value, contains **two**
+procedures and so produces **two diagrams** — one per calculation. The theory
+is not a procedure and gets no diagram of its own.
+
+- Give each diagram a `title` naming the procedure ("Calculating the subnet
+  mask from /26"), because they are read side by side.
+- Two procedures that share every step are one diagram, not two.
+- Usually 1 to 3. Do not manufacture diagrams to hit a number: if the lecture
+  contains exactly one worked procedure, emit exactly one.
+- If the transcript is entirely theory with no worked steps, emit a single
+  diagram of the concept's structure rather than a fake procedure.
+
+Rules for each diagram:
 - `kind` is one of: `start`, `step`, `decision`, `result`, `formula`, `note`.
   Use `decision` only for a real branch, and give its outgoing edges labels.
   Use `formula` for a rule or equation, `result` for a final answer.
@@ -123,8 +144,8 @@ Rules:
 - Keep the real numbers from the worked example in the labels.
 - `id` values are arbitrary but must be unique and match the edges.
 - Edges define the flow. A mostly linear chain is normal and good.
-- 5 to 15 nodes. If the material has two unrelated flows, emit both as separate
-  chains — disconnected components are laid out side by side.
+- 5 to 15 nodes per diagram. Two unrelated flows belong in two diagrams, not as
+  disconnected chains inside one.
 - Every rule in the section above still applies: resolve the teacher's
   corrections and keep only the final values.
 """

@@ -176,6 +176,18 @@ separate Excalidraw file — it puts a real image on the pasteboard, so Notion
 embeds a picture rather than a filename. Same layout engine as `excalidraw`;
 pick `excalidraw` when you still want to edit the shapes afterwards.
 
+**One flowchart per procedure.** A lecture that explains DHCP theory, then works
+through an IP range, then works out a CIDR value contains two procedures, so
+`png` produces two images and `excalidraw` produces one scene holding both
+flowcharts side by side. Either way a single paste delivers all of them — the
+PNGs go on the pasteboard as files, which is the only way macOS lets several
+images paste at once. Theory that is not a worked procedure does not become its
+own diagram.
+
+Images are written as 128-colour PNGs. A flowchart is flat fills and text, so
+the palette is visually identical to full colour at roughly half the size,
+which matters once one lecture yields three of them.
+
 Re-render a lecture in another format, without re-recording or paying to
 transcribe again — the transcript is already saved, so this is one model call:
 

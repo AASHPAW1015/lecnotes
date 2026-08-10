@@ -76,9 +76,12 @@ def generate(transcript: str, mode: str, vocab: str = "",
 
     raw = raw.strip()
     if mode == "excalidraw":
-        return excalidraw.to_clipboard_json(excalidraw.parse_spec(raw))
+        # Every procedure in one scene, so a single paste drops them all on the
+        # canvas side by side.
+        return excalidraw.to_clipboard_json(excalidraw.parse_specs(raw))
     if mode == "png":
-        return render.render(excalidraw.parse_spec(raw))
+        # One image per procedure; the caller writes and copies them together.
+        return [render.render(s) for s in excalidraw.parse_specs(raw)]
     return _strip_fence(raw)
 
 

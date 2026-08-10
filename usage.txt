@@ -181,6 +181,28 @@
 
 
 -------------------------------------------------------------------------------
+ MULTIPLE FLOWCHARTS FROM ONE LECTURE
+-------------------------------------------------------------------------------
+
+  A flowchart is for a PROCEDURE — steps you follow to get an answer. One
+  diagram is made per distinct procedure in the transcript.
+
+  Teacher does theory, then calculates an IP range, then calculates a CIDR
+  value = TWO procedures = two flowcharts. The theory gets none.
+
+      lecnote redo png          -> notes-png-1.png, notes-png-2.png
+      lecnote redo excalidraw   -> one scene, both charts side by side
+
+  Both paste in ONE go:
+      2+ PNGs   go on the clipboard as FILES (the only way macOS pastes
+                several images at once). Notion uploads them all.
+      1 PNG     goes on as an IMAGE, so it pastes as a picture as before.
+
+  Images are 128-colour PNGs. Flowcharts are flat fills and text, so this
+  looks identical to full colour at roughly half the size.
+
+
+-------------------------------------------------------------------------------
  WORKING FROM FILES (no microphone)
 -------------------------------------------------------------------------------
 

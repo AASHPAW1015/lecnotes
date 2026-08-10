@@ -116,7 +116,20 @@ def _process(session: Path, mode: str, vocab: str, show: bool, keep: bool) -> in
 
     suffix = {"excalidraw": "json", "png": "png"}.get(mode, "md")
     out_path = session / f"notes-{mode}.{suffix}"
-    if isinstance(out, bytes):
+    if isinstance(out, list):
+        # One PNG per procedure in the lecture. A single image still goes on the
+        # pasteboard as an image, so pasting stays a picture rather than a file;
+        # several go on as files, which is the only way to paste them together.
+        paths = [session / (f"notes-png-{i}.png" if len(out) > 1 else "notes-png.png")
+                 for i in range(1, len(out) + 1)]
+        for path, data in zip(paths, out):
+            path.write_bytes(data)
+        if len(out) == 1:
+            clipboard.copy_png(out[0])
+        else:
+            clipboard.copy_files(paths)
+        out_path = paths[0]
+    elif isinstance(out, bytes):
         out_path.write_bytes(out)
         clipboard.copy_png(out)
     else:
@@ -129,10 +142,16 @@ def _process(session: Path, mode: str, vocab: str, show: bool, keep: bool) -> in
         wav.unlink(missing_ok=True)
         wav.with_suffix(".stats.json").unlink(missing_ok=True)
 
+    count = len(out) if isinstance(out, list) else 1
     target = {"excalidraw": "Excalidraw (paste on the canvas)",
               "png": "Notion / anywhere (it is an image)"}.get(mode, "Notion / Obsidian")
-    log(f"\n  copied to clipboard — paste into {target}")
-    log(f"  saved: {out_path}")
+    if count > 1:
+        log(f"\n  {count} diagrams copied — one paste drops all of them into Notion")
+        for path in paths:
+            log(f"  saved: {path}  ({path.stat().st_size / 1000:.0f} KB)")
+    else:
+        log(f"\n  copied to clipboard — paste into {target}")
+        log(f"  saved: {out_path}")
 
     detail = f"{len(text.split())} words in"
     notify.done(mode, detail)

@@ -16,6 +16,9 @@ from . import diagram
 SCALE = 2  # render at 2x for retina displays
 MARGIN = 40
 BG = "#ffffff"
+# Enough for every fill, stroke and antialiased text edge; well past the point
+# where more colours change what the eye sees on a diagram.
+PALETTE_COLORS = 128
 TEXT = "#1e1e1e"
 ARROW = "#343a40"
 
@@ -74,7 +77,10 @@ def render(spec: dict) -> bytes:
     lay = diagram.layout(spec, measure=_measurer(body))
 
     title_h = 50 if lay.title else 0
-    width = int(lay.width * SCALE + MARGIN * 2 * SCALE)
+    # A short procedure can carry a long title, so the canvas has to fit the
+    # wider of the two or the heading is cut off at the right edge.
+    title_w = (title_font.getlength(lay.title) if lay.title else 0) + MARGIN * 2 * SCALE
+    width = int(max(lay.width * SCALE + MARGIN * 2 * SCALE, title_w))
     height = int(lay.height * SCALE + (MARGIN * 2 + title_h) * SCALE)
 
     img = Image.new("RGB", (max(width, 200), max(height, 200)), BG)
@@ -143,6 +149,10 @@ def render(spec: dict) -> bytes:
                         mx + tw / 2 + pad, my + th / 2 + pad], fill=BG)
         draw.text((mx - tw / 2, my - th / 2), lbl, font=edge_font, fill=TEXT)
 
+    # A flowchart is flat fills, black text and a handful of pastels — nothing
+    # like a photograph. A palette holds all of it exactly while cutting the
+    # file to a fraction, which matters once a lecture yields several images.
     buf = io.BytesIO()
-    img.save(buf, format="PNG", optimize=True)
+    img.quantize(colors=PALETTE_COLORS, method=Image.MEDIANCUT, dither=Image.NONE) \
+       .save(buf, format="PNG", optimize=True)
     return buf.getvalue()
