@@ -25,9 +25,14 @@ BLOCK = 1 << 16
 class Recorder:
     """Streams mic input into a WAV file until stopped."""
 
-    def __init__(self, path: Path, device=None):
+    def __init__(self, path: Path, device=None, channels: int | None = None):
         self.path = Path(path)
         self.device = device
+        # Virtual devices like BlackHole are stereo, and asking a stereo device
+        # for one channel fails outright on Core Audio. Open at whatever the
+        # device offers and fold to mono on the way to disk, which is what
+        # Whisper wants anyway.
+        self.channels = channels or input_channels(device)
         self._q: queue.Queue = queue.Queue()
         self._stop = threading.Event()
         self.peak = 0.0
@@ -45,12 +50,20 @@ class Recorder:
         """Blocks until stop() is called from another thread or a signal."""
         stream = sd.InputStream(
             samplerate=config.SAMPLE_RATE,
-            channels=config.CHANNELS,
+            channels=self.channels,
             device=self.device,
             dtype="float32",
             callback=self._callback,
             blocksize=1024,
         )
+
+        def write(block):
+            if block.ndim > 1 and block.shape[1] > 1:
+                block = block.mean(axis=1, keepdims=True)
+            f.write(block)
+            self.frames += len(block)
+            self.peak = max(self.peak, float(np.abs(block).max()))
+
         with sf.SoundFile(
             self.path, mode="w",
             samplerate=config.SAMPLE_RATE,
@@ -62,17 +75,14 @@ class Recorder:
                     block = self._q.get(timeout=0.2)
                 except queue.Empty:
                     continue
-                f.write(block)
-                self.frames += len(block)
-                self.peak = max(self.peak, float(np.abs(block).max()))
+                write(block)
             # Drain whatever the callback queued before the stop landed.
             while True:
                 try:
                     block = self._q.get_nowait()
                 except queue.Empty:
                     break
-                f.write(block)
-                self.frames += len(block)
+                write(block)
         return self.path
 
     @property
@@ -146,6 +156,49 @@ def split(path: Path, max_bytes: int = config.MAX_UPLOAD_BYTES) -> list[Path]:
 
 def list_devices() -> str:
     return str(sd.query_devices())
+
+
+def input_channels(device, cap: int = 2) -> int:
+    """Channel count to open a device with, capped since we fold to mono anyway."""
+    try:
+        info = sd.query_devices(device if device is not None else sd.default.device[0])
+        return max(1, min(int(info["max_input_channels"]), cap))
+    except Exception:  # noqa: BLE001 - fall back to mono and let the stream complain
+        return 1
+
+
+def find_input(name_hint: str) -> int | None:
+    """Index of the first input device whose name contains name_hint."""
+    hint = name_hint.lower()
+    for i, dev in enumerate(sd.query_devices()):
+        if dev["max_input_channels"] > 0 and hint in dev["name"].lower():
+            return i
+    return None
+
+
+def loopback_device() -> int | None:
+    """The virtual device carrying system audio, if one is installed."""
+    for hint in config.LOOPBACK_HINTS:
+        idx = find_input(hint)
+        if idx is not None:
+            return idx
+    return None
+
+
+def device_name(device) -> str:
+    try:
+        return str(sd.query_devices(device)["name"])
+    except Exception:  # noqa: BLE001
+        return str(device)
+
+
+def default_output_name() -> str:
+    """Name of the current system output, to check it routes into the loopback."""
+    try:
+        out = sd.default.device[1]
+        return str(sd.query_devices(out)["name"])
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def default_input() -> int | None:

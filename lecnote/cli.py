@@ -175,6 +175,101 @@ def cmd_run(args) -> int:
     return _process(session, args.mode, args.vocab, args.show, args.keep)
 
 
+SETUP_HELP = """  System audio needs a virtual device to route through — macOS gives no app
+  the speaker mix directly.
+
+  1. Install one:
+       brew install blackhole-2ch
+
+  2. Open "Audio MIDI Setup" (it ships with macOS).
+     Click + at the bottom left > Create Multi-Output Device.
+     Tick BOTH "BlackHole 2ch" and your speakers/headphones.
+     Without your speakers ticked, the audio goes silent while recording.
+
+  3. Set that Multi-Output Device as the system output — the volume menu in
+     the menu bar, or System Settings > Sound > Output.
+
+  Then `lecnote listen` records whatever is playing."""
+
+
+def _system_device() -> int:
+    """Resolve the loopback input, explaining the setup if it is not there."""
+    idx = recorder.loopback_device()
+    if idx is None:
+        raise SystemExit("error: no system-audio device found.\n\n" + SETUP_HELP)
+    return idx
+
+
+def cmd_listen(args) -> int:
+    """Record what the Mac is playing, rather than the microphone."""
+    device = args.device if args.device is not None else _system_device()
+    name = recorder.device_name(device)
+    out = recorder.default_output_name()
+
+    # The classic failure: BlackHole exists but output still goes to the
+    # speakers, so it captures pure silence for the length of a whole lecture.
+    if out and not _routes_into_loopback(out):
+        log(f"  warning: system output is '{out}', which does not feed {name}.")
+        log("  You will record silence. Switch output to a Multi-Output Device")
+        log("  that includes it — `lecnote audio-setup` explains how.\n")
+
+    session = _new_session()
+    wav = session / "audio.wav"
+    rec = recorder.Recorder(wav, device=device)
+    thread = threading.Thread(target=rec.run, daemon=True)
+    thread.start()
+    time.sleep(0.3)
+
+    log(f"\n  ● listening to system audio via {name}  [{args.mode}]"
+        "   press Enter to stop\n")
+    try:
+        input()
+    except (KeyboardInterrupt, EOFError):
+        log()
+    rec.stop()
+    thread.join(timeout=10)
+
+    wav.with_suffix(".stats.json").write_text(
+        json.dumps({"seconds": rec.seconds, "peak": rec.peak}), encoding="utf-8")
+
+    log("  ■ stopped")
+    _check_audio(wav, session)
+    return _process(session, args.mode, args.vocab, args.show, args.keep)
+
+
+def _routes_into_loopback(output_name: str) -> bool:
+    """A Multi-Output or the loopback itself feeds the virtual device."""
+    low = output_name.lower()
+    if any(h.lower() in low for h in config.LOOPBACK_HINTS):
+        return True
+    # A Multi-Output Device's members are not queryable through PortAudio, so
+    # treat one as plausible rather than warn on every correct setup.
+    return "multi-output" in low or "aggregate" in low
+
+
+def cmd_audio_setup(args) -> int:  # noqa: ARG001
+    """Report what is installed and what is still missing."""
+    idx = recorder.loopback_device()
+    out = recorder.default_output_name()
+
+    if idx is None:
+        log("  system audio: NOT set up\n")
+        log(SETUP_HELP)
+        return 1
+
+    log(f"  loopback device : {recorder.device_name(idx)}  (index {idx})")
+    log(f"  system output   : {out or 'unknown'}")
+    if _routes_into_loopback(out):
+        log("\n  looks right — `lecnote listen` should capture what is playing.")
+        log("  If it records silence, check the Multi-Output Device actually")
+        log("  includes the loopback and your speakers.")
+        return 0
+    log("\n  output does not feed the loopback — `lecnote listen` would record")
+    log("  silence. Fix step 3:\n")
+    log(SETUP_HELP)
+    return 1
+
+
 def cmd_start(args) -> int:
     if config.CURRENT.is_file():
         state = json.loads(config.CURRENT.read_text())
@@ -561,6 +656,12 @@ def build_parser(default_mode: str) -> argparse.ArgumentParser:
     clean.add_argument("-y", "--yes", action="store_true", help="skip the confirmation")
     clean.set_defaults(func=cmd_clean)
 
+    lis = common(subs.add_parser("listen", help="record system audio (YouTube, Zoom) not the mic"))
+    lis.add_argument("mode", nargs="?", default=default_mode, choices=MODES)
+    lis.set_defaults(func=cmd_listen)
+
+    subs.add_parser("audio-setup", help="check system-audio capture is set up").set_defaults(
+        func=cmd_audio_setup)
     subs.add_parser("sessions", help="list captured lectures").set_defaults(func=cmd_sessions)
     subs.add_parser("status", help="is anything recording?").set_defaults(func=cmd_status)
     tr = subs.add_parser("transcript", help="print a raw transcript")
