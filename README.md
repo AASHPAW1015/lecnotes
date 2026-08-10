@@ -180,8 +180,11 @@ pick `excalidraw` when you still want to edit the shapes afterwards.
 through an IP range, then works out a CIDR value contains two procedures, so
 `png` produces two images and `excalidraw` produces one scene holding both
 flowcharts side by side. Either way a single paste delivers all of them — the
-PNGs go on the pasteboard as files, which is the only way macOS lets several
-images paste at once. Theory that is not a worked procedure does not become its
+PNGs go on the pasteboard as file URLs, which is the only way macOS lets
+several images paste at once (the image pasteboard holds exactly one picture).
+That needs the real `NSPasteboard` API via pyobjc, installed with the other
+dependencies; without it the paste falls back to a Finder-only format and says
+so. Theory that is not a worked procedure does not become its
 own diagram.
 
 Images are written as 128-colour PNGs. A flowchart is flat fills and text, so

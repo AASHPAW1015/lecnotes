@@ -1,6 +1,7 @@
 """macOS clipboard write, text and images."""
 
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -15,18 +16,39 @@ def copy(text: str) -> None:
 def copy_files(paths) -> None:
     """Put several files on the pasteboard so one paste delivers them all.
 
-    The image clipboard holds exactly one picture, which is no good for a
-    lecture that yielded three flowcharts. File references can be a list, and
-    apps that accept dropped files — Notion among them — take all of them from
-    a single paste.
+    The image pasteboard holds exactly one picture, which is no good for a
+    lecture that produced three flowcharts. Writing file URLs instead lets an
+    app that accepts dropped files — Notion among them — take every one of them
+    from a single paste.
+
+    This needs the real pasteboard API. AppleScript can only put its own alias
+    objects on the board, which Finder understands and nothing else does, so it
+    is kept as a degraded fallback rather than the main path.
     """
     paths = [Path(p).resolve() for p in paths]
+    try:
+        from AppKit import NSURL, NSPasteboard
+    except ImportError:
+        _copy_files_applescript(paths)
+        return
+
+    board = NSPasteboard.generalPasteboard()
+    board.clearContents()
+    if not board.writeObjects_([NSURL.fileURLWithPath_(str(p)) for p in paths]):
+        raise SystemExit("error: the pasteboard refused the images.")
+
+
+def _copy_files_applescript(paths) -> None:
+    """Fallback for a machine without pyobjc. Pastes into Finder, little else."""
     items = ", ".join(f'POSIX file "{p}" as alias' for p in paths)
-    script = f"tell application \"Finder\" to set the clipboard to {{{items}}}"
-    proc = subprocess.run(["osascript", "-e", script], capture_output=True, check=False)
+    proc = subprocess.run(
+        ["osascript", "-e", f'tell application "Finder" to set the clipboard to {{{items}}}'],
+        capture_output=True, check=False)
     if proc.returncode != 0:
         raise SystemExit("error: could not copy the images to the clipboard: "
                          + proc.stderr.decode(errors="replace").strip())
+    print("  note: install pyobjc-framework-Cocoa for images that paste into Notion",
+          file=sys.stderr)
 
 
 def copy_png(data: bytes) -> None:

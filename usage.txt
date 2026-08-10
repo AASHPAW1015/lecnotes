@@ -194,9 +194,13 @@
       lecnote redo excalidraw   -> one scene, both charts side by side
 
   Both paste in ONE go:
-      2+ PNGs   go on the clipboard as FILES (the only way macOS pastes
+      2+ PNGs   go on the clipboard as FILE URLS (the only way macOS pastes
                 several images at once). Notion uploads them all.
       1 PNG     goes on as an IMAGE, so it pastes as a picture as before.
+
+  Multi-image paste needs pyobjc-framework-Cocoa, which comes with the other
+  dependencies. AppleScript cannot do this — it can only put its own alias
+  objects on the clipboard, which Finder understands and Notion does not.
 
   Images are 128-colour PNGs. Flowcharts are flat fills and text, so this
   looks identical to full colour at roughly half the size.

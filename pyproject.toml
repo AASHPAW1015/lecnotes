@@ -19,6 +19,9 @@ dependencies = [
     "anthropic>=0.60",
     "httpx>=0.27",
     "Pillow>=10",
+    # Real pasteboard access: the only way to put several files on the
+    # clipboard so Notion accepts them all from one paste.
+    "pyobjc-framework-Cocoa>=10",
 ]
 
 [project.urls]

@@ -3,3 +3,4 @@ soundfile>=0.13
 anthropic>=0.60
 httpx>=0.27
 Pillow>=10
+pyobjc-framework-Cocoa>=10
