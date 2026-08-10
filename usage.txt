@@ -122,6 +122,46 @@
 
 
 -------------------------------------------------------------------------------
+ SYSTEM AUDIO (YouTube, Zoom, recorded lectures)
+-------------------------------------------------------------------------------
+
+  lecnote listen               record what the Mac is PLAYING, not the mic
+  lecnote listen png           ...with the format to produce
+  lecnote output               toggle output: capture <-> normal
+  lecnote output --show        which one am I on right now?
+  lecnote audio-setup          check the routing, say what is missing
+
+  After `listen`, everything is the same as a mic recording: same session,
+  `lecnote redo <mode>` for other formats, `lecnote sessions` to find it.
+
+  ONE-TIME SETUP
+      brew install blackhole-2ch
+      sudo killall coreaudiod        # drivers only appear after this
+      brew install switchaudio-osx   # for `lecnote output`
+
+      Audio MIDI Setup > + > Create Multi-Output Device
+          tick BlackHole 2ch AND your speakers
+          primary device = your speakers
+          drift correction = on for BlackHole
+      Set that Multi-Output Device as the system output.
+
+  WHY THE SPEAKERS MUST BE TICKED
+      macOS gives no app the speaker mix, so audio is routed through a
+      virtual device instead. If ONLY BlackHole is ticked, it is captured
+      but you hear nothing. Ticking both sends it to each.
+
+  THE FAILURE TO KNOW ABOUT
+      BlackHole installed but output still on the speakers = a full lecture
+      of perfect silence. `listen` warns BEFORE recording, but if you ever
+      see that warning, run `lecnote output`.
+
+  VOLUME KEYS
+      They stop working while a Multi-Output Device is selected. Core Audio
+      limitation, not lecnote. `lecnote output` flips back and remembers the
+      real device you were on, so headphones are not swapped for speakers.
+
+
+-------------------------------------------------------------------------------
  OUTPUT MODES
 -------------------------------------------------------------------------------
 
@@ -217,6 +257,8 @@
 
       Toggle (Notion)       start / stop + copy notes
       Toggle (Excalidraw)   same, as a diagram scene
+      Listen (System Audio) same rhythm, records what the Mac is playing
+      Toggle Audio Output   capture routing <-> normal sound
       Re-render             a captured lecture in another format
       Sessions              list captured lectures
       Status                recording or idle

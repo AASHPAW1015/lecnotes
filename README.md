@@ -123,6 +123,42 @@ lecnote toggle            # starts if idle, stops and makes notes if recording
 lecnote toggle png        # ...with the format to produce on stop
 ```
 
+### Lectures that are not in a room
+
+`listen` records what the Mac is playing instead of the microphone — a lecture
+on YouTube, a Zoom call, a recording a friend sent you:
+
+```bash
+lecnote listen            # Enter to stop; notes -> clipboard, same as always
+lecnote redo excalidraw   # and re-render it like any other session
+```
+
+macOS hands no app the speaker mix, so this needs a virtual device the sound is
+routed through first:
+
+```bash
+brew install blackhole-2ch
+sudo killall coreaudiod     # new audio drivers only appear after this
+```
+
+Then in **Audio MIDI Setup**: `+` > *Create Multi-Output Device*, tick **both**
+`BlackHole 2ch` and your speakers, and select it as the system output. Ticking
+your speakers is what lets you still hear the lecture while it is captured.
+
+```bash
+lecnote audio-setup       # says what is installed and what is still missing
+```
+
+While that Multi-Output Device is selected the volume keys stop working — a
+Core Audio limitation, not something lecnote can fix. So switching back is one
+command, and it remembers the real device you were on:
+
+```bash
+brew install switchaudio-osx
+lecnote output            # capture <-> normal
+lecnote output --show     # which one am I on?
+```
+
 A macOS notification fires when the notes land on the clipboard, so you do not
 have to watch the terminal. Set `LECNOTE_NOTIFY=0` to silence it.
 
@@ -194,6 +230,8 @@ Raycast > Extensions > Script Commands > **Add Script Directory**, pointed at th
 |---|---|
 | Toggle (Notion) | Start recording; run again to stop and copy notes |
 | Toggle (Excalidraw) | Same, as a diagram scene |
+| Listen (System Audio) | Same rhythm, but records what the Mac is playing |
+| Toggle Audio Output | Capture routing ↔ normal sound |
 | Re-render | A captured lecture in another format |
 | Sessions | List captured lectures |
 | Status | Recording or idle |

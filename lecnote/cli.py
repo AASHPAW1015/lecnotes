@@ -152,14 +152,16 @@ def _process(session: Path, mode: str, vocab: str, show: bool, keep: bool) -> in
 def cmd_run(args) -> int:
     session = _new_session()
     wav = session / "audio.wav"
-    device = args.device if args.device is not None else recorder.default_input()
+    device = _resolve_device(args)
 
     rec = recorder.Recorder(wav, device=device)
     thread = threading.Thread(target=rec.run, daemon=True)
     thread.start()
     time.sleep(0.3)
 
-    log(f"\n  ● listening  [{args.mode}]   press Enter to stop\n")
+    src = ("system audio via " + recorder.device_name(device)
+           if getattr(args, "source", "mic") == "system" else "microphone")
+    log(f"\n  ● listening to {src}  [{args.mode}]   press Enter to stop\n")
     try:
         input()
     except (KeyboardInterrupt, EOFError):
@@ -200,41 +202,29 @@ def _system_device() -> int:
     return idx
 
 
+def _resolve_device(args):
+    """Input to record from, honouring -d, then --source, then the default mic."""
+    if args.device is not None:
+        return args.device
+    if getattr(args, "source", "mic") == "system":
+        dev = _system_device()
+        out = recorder.default_output_name()
+        if out and not _routes_into_loopback(out):
+            log(f"  warning: system output is '{out}', which does not feed "
+                f"{recorder.device_name(dev)}.")
+            log("  You will record silence — run `lecnote output` to switch.\n")
+        return dev
+    return recorder.default_input()
+
+
 def cmd_listen(args) -> int:
-    """Record what the Mac is playing, rather than the microphone."""
-    device = args.device if args.device is not None else _system_device()
-    name = recorder.device_name(device)
-    out = recorder.default_output_name()
+    """Record what the Mac is playing, rather than the microphone.
 
-    # The classic failure: BlackHole exists but output still goes to the
-    # speakers, so it captures pure silence for the length of a whole lecture.
-    if out and not _routes_into_loopback(out):
-        log(f"  warning: system output is '{out}', which does not feed {name}.")
-        log("  You will record silence. Switch output to a Multi-Output Device")
-        log("  that includes it — `lecnote audio-setup` explains how.\n")
-
-    session = _new_session()
-    wav = session / "audio.wav"
-    rec = recorder.Recorder(wav, device=device)
-    thread = threading.Thread(target=rec.run, daemon=True)
-    thread.start()
-    time.sleep(0.3)
-
-    log(f"\n  ● listening to system audio via {name}  [{args.mode}]"
-        "   press Enter to stop\n")
-    try:
-        input()
-    except (KeyboardInterrupt, EOFError):
-        log()
-    rec.stop()
-    thread.join(timeout=10)
-
-    wav.with_suffix(".stats.json").write_text(
-        json.dumps({"seconds": rec.seconds, "peak": rec.peak}), encoding="utf-8")
-
-    log("  ■ stopped")
-    _check_audio(wav, session)
-    return _process(session, args.mode, args.vocab, args.show, args.keep)
+    Sugar for `lecnote run --source system`, because that is the whole point of
+    the command and nobody should have to remember the flag.
+    """
+    args.source = "system"
+    return cmd_run(args)
 
 
 def _routes_into_loopback(output_name: str) -> bool:
@@ -245,6 +235,42 @@ def _routes_into_loopback(output_name: str) -> bool:
     # A Multi-Output Device's members are not queryable through PortAudio, so
     # treat one as plausible rather than warn on every correct setup.
     return "multi-output" in low or "aggregate" in low
+
+
+def cmd_output(args) -> int:
+    """Flip the system output between capture routing and normal sound.
+
+    While a Multi-Output Device is selected the volume keys stop working, which
+    is a Core Audio limitation rather than something lecnote can fix — so make
+    switching back a single keystroke instead.
+    """
+    now = recorder.current_output()
+
+    if args.show:
+        state = "capture" if recorder.is_capture_output(now) else "normal"
+        log(f"  {now}  [{state}]")
+        return 0
+
+    if recorder.is_capture_output(now):
+        # Prefer whatever real device was in use before capture was turned on,
+        # so headphones are not silently swapped for the built-in speakers.
+        prev = _read_meta(config.HOME).get("prev_output") if config.HOME.is_dir() else None
+        target = prev if prev and prev in recorder.outputs() else recorder.speaker_output()
+        if not target:
+            raise SystemExit("error: no normal output device found to switch back to.")
+        recorder.set_output(target)
+        log(f"  output: {target}  [normal — volume keys work]")
+        return 0
+
+    target = recorder.capture_output()
+    if not target:
+        raise SystemExit(
+            "error: no Multi-Output Device found, so system audio cannot be\n"
+            "  captured yet. Run `lecnote audio-setup` for the steps.")
+    _write_meta(config.HOME, prev_output=now)
+    recorder.set_output(target)
+    log(f"  output: {target}  [capture — `lecnote listen` will hear this]")
+    return 0
 
 
 def cmd_audio_setup(args) -> int:  # noqa: ARG001
@@ -280,7 +306,7 @@ def cmd_start(args) -> int:
 
     session = _new_session()
     wav = session / "audio.wav"
-    device = args.device if args.device is not None else recorder.default_input()
+    device = _resolve_device(args)
 
     logfile = (session / "recorder.log").open("w")
     proc = subprocess.Popen(
@@ -608,6 +634,8 @@ def build_parser(default_mode: str) -> argparse.ArgumentParser:
                               "transcription and note accuracy")
         sub.add_argument("-d", "--device", type=int, default=None,
                          help="input device index (see `lecnote devices`)")
+        sub.add_argument("--source", choices=("mic", "system"), default="mic",
+                         help="mic (default) or system audio via the loopback device")
         sub.add_argument("-p", "--show", action="store_true", help="also print notes to stdout")
         sub.add_argument("--keep", action="store_true", help="keep the audio file")
         return sub
@@ -659,6 +687,10 @@ def build_parser(default_mode: str) -> argparse.ArgumentParser:
     lis = common(subs.add_parser("listen", help="record system audio (YouTube, Zoom) not the mic"))
     lis.add_argument("mode", nargs="?", default=default_mode, choices=MODES)
     lis.set_defaults(func=cmd_listen)
+
+    out = subs.add_parser("output", help="toggle system output between capture and normal")
+    out.add_argument("--show", action="store_true", help="print the current output, do not change it")
+    out.set_defaults(func=cmd_output)
 
     subs.add_parser("audio-setup", help="check system-audio capture is set up").set_defaults(
         func=cmd_audio_setup)

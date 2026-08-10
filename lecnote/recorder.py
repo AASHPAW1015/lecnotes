@@ -5,6 +5,8 @@ file. Compression to Ogg Vorbis happens once, after the recording stops.
 """
 
 import queue
+import shutil
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -183,6 +185,60 @@ def loopback_device() -> int | None:
         if idx is not None:
             return idx
     return None
+
+
+# Output devices that exist to route audio rather than play it. Switching *to*
+# one of these is how capture is enabled; switching away restores normal sound.
+VIRTUAL_OUTPUT_HINTS = ("blackhole", "multi-output", "aggregate",
+                        "soundflower", "loopback", "steam streaming")
+
+
+def is_capture_output(name: str) -> bool:
+    low = name.lower()
+    return any(h in low for h in VIRTUAL_OUTPUT_HINTS)
+
+
+def _switch(*args: str) -> str:
+    """Run SwitchAudioSource, which is how output is changed from a script."""
+    exe = shutil.which("SwitchAudioSource")
+    if not exe:
+        raise SystemExit(
+            "error: SwitchAudioSource is not installed, so the output cannot be\n"
+            "  changed from the command line. Install it with:\n"
+            "    brew install switchaudio-osx")
+    proc = subprocess.run([exe, *args], capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise SystemExit(f"error: SwitchAudioSource failed: "
+                         f"{(proc.stderr or proc.stdout).strip()[:200]}")
+    return proc.stdout.strip()
+
+
+def current_output() -> str:
+    return _switch("-c", "-t", "output")
+
+
+def outputs() -> list[str]:
+    return [ln.strip() for ln in _switch("-a", "-t", "output").splitlines() if ln.strip()]
+
+
+def set_output(name: str) -> None:
+    _switch("-s", name, "-t", "output")
+
+
+def capture_output() -> str | None:
+    """The output that feeds the loopback: a Multi-Output device, ideally."""
+    names = outputs()
+    for want in ("multi-output", "aggregate"):
+        for n in names:
+            if want in n.lower():
+                return n
+    # BlackHole alone works but is silent to the ears, so only as a last resort.
+    return next((n for n in names if "blackhole" in n.lower()), None)
+
+
+def speaker_output() -> str | None:
+    """A real output — what to fall back to when capture is turned off."""
+    return next((n for n in outputs() if not is_capture_output(n)), None)
 
 
 def device_name(device) -> str:
