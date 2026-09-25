@@ -20,7 +20,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from . import __version__, clipboard, config, notes, notify, prompts, recorder
+from . import __version__, apptap, clipboard, config, notes, notify, prompts, recorder
 
 MODES = list(prompts.MODES)
 DEFAULT_MODE = "notion"
@@ -90,9 +90,17 @@ def _check_audio(wav: Path, session: Path, source: str = "mic") -> None:
         peak = json.loads(stats_path.read_text()).get("peak")
     secs = recorder.duration(wav)
     log(f"  captured {secs:.0f}s of audio")
+    # A tapped app that never plays delivers no frames at all rather than
+    # silence, so for app capture "too short" and "silent" are the same problem.
+    silent = peak is not None and peak < 0.001
+    if source.startswith("app:") and (secs < 1.0 or silent):
+        raise SystemExit(
+            f"error: nothing came from {source[4:]} — it produced no sound while recording.\n"
+            f"  Was it actually playing? `lecnote apps` marks playing apps with ♪.\n"
+            + apptap.PERMISSION_HELP)
     if secs < 1.0:
         raise SystemExit("error: recording is under a second — nothing to transcribe.")
-    if peak is not None and peak < 0.001:
+    if silent:
         if source == "system":
             dev = recorder.loopback_device()
             raise SystemExit(SYSTEM_SILENCE.format(
@@ -261,9 +269,16 @@ def cmd_run(args) -> int:
     _refuse_if_recording()
     session = _new_session()
     wav = session / "audio.wav"
-    device = _resolve_device(args)
-
-    rec = recorder.Recorder(wav, device=device)
+    app = _app_for(args)
+    if app:
+        rec = apptap.TapRecorder(wav, app)
+        source, src = f"app:{app}", f"{app} only (app audio)"
+    else:
+        device = _resolve_device(args)
+        rec = recorder.Recorder(wav, device=device)
+        source = getattr(args, "source", "mic")
+        src = ("system audio via " + recorder.device_name(device)
+               if source == "system" else "microphone")
     thread = threading.Thread(target=rec.run, daemon=True)
     thread.start()
     time.sleep(0.3)
@@ -282,8 +297,6 @@ def cmd_run(args) -> int:
         "vocab": args.vocab, "started": time.time(), "foreground": True,
     }), encoding="utf-8")
 
-    src = ("system audio via " + recorder.device_name(device)
-           if getattr(args, "source", "mic") == "system" else "microphone")
     log(f"\n  ● listening to {src}  [{args.mode}]   press Enter to stop\n")
     try:
         input()
@@ -298,7 +311,7 @@ def cmd_run(args) -> int:
         json.dumps({"seconds": rec.seconds, "peak": rec.peak}), encoding="utf-8")
 
     log("  ■ stopped")
-    _check_audio(wav, session, getattr(args, "source", "mic"))
+    _check_audio(wav, session, source)
     return _process(session, args.mode, args.vocab, args.show, args.keep)
 
 
@@ -325,6 +338,15 @@ def _system_device() -> int:
     if idx is None:
         raise SystemExit("error: no system-audio device found.\n\n" + SETUP_HELP)
     return idx
+
+
+def _app_for(args) -> str | None:
+    """The single app to tap, if any: --app, or LECNOTE_LISTEN_APP for system audio."""
+    if getattr(args, "app", None):
+        return args.app
+    if getattr(args, "source", "mic") == "system" and config.LISTEN_APP:
+        return config.LISTEN_APP
+    return None
 
 
 def _resolve_device(args):
@@ -398,6 +420,13 @@ def cmd_output(args) -> int:
     return 0
 
 
+def cmd_apps(args) -> int:  # noqa: ARG001
+    """Apps the audio system knows about, for choosing a --app name."""
+    log(apptap.list_apps())
+    log("\n  ♪ = playing now.  Record one with:  lecnote listen --app firefox")
+    return 0
+
+
 def cmd_audio_setup(args) -> int:  # noqa: ARG001
     """Report what is installed and what is still missing."""
     idx = recorder.loopback_device()
@@ -425,11 +454,17 @@ def cmd_start(args) -> int:
     _refuse_if_recording()
     session = _new_session()
     wav = session / "audio.wav"
-    device = _resolve_device(args)
+    app = _app_for(args)
+    if app:
+        argv, source = apptap.record_argv(app, wav), f"app:{app}"
+    else:
+        device = _resolve_device(args)
+        argv = [sys.executable, "-m", "lecnote.recproc", str(wav), str(device)]
+        source = getattr(args, "source", "mic")
 
     logfile = (session / "recorder.log").open("w")
     proc = subprocess.Popen(
-        [sys.executable, "-m", "lecnote.recproc", str(wav), str(device)],
+        argv,
         stdout=logfile, stderr=logfile,
         start_new_session=True,
         cwd=str(config.PROJECT_ROOT),
@@ -442,11 +477,12 @@ def cmd_start(args) -> int:
     config.CURRENT.write_text(json.dumps({
         "session": str(session), "pid": proc.pid, "mode": args.mode,
         "vocab": args.vocab, "started": time.time(),
-        "source": getattr(args, "source", "mic"),
+        "source": source,
     }), encoding="utf-8")
     _write_meta(session, mode=args.mode, vocab=args.vocab)
 
-    log(f"  ● listening in background  [{args.mode}]   stop with: lecnote stop")
+    what = f" to {app} only" if app else ""
+    log(f"  ● listening{what} in background  [{args.mode}]   stop with: lecnote stop")
     return 0
 
 
@@ -773,6 +809,8 @@ def build_parser(default_mode: str) -> argparse.ArgumentParser:
                          help="input device index (see `lecnote devices`)")
         sub.add_argument("--source", choices=("mic", "system"), default="mic",
                          help="mic (default) or system audio via the loopback device")
+        sub.add_argument("--app", default=None, metavar="NAME",
+                         help="record only this app's audio, e.g. firefox (see `lecnote apps`)")
         sub.add_argument("-p", "--show", action="store_true", help="also print notes to stdout")
         sub.add_argument("--keep", action="store_true", help="keep the audio file")
         return sub
@@ -829,6 +867,8 @@ def build_parser(default_mode: str) -> argparse.ArgumentParser:
     out.add_argument("--show", action="store_true", help="print the current output, do not change it")
     out.set_defaults(func=cmd_output)
 
+    subs.add_parser("apps", help="list apps whose audio can be recorded").set_defaults(
+        func=cmd_apps)
     subs.add_parser("audio-setup", help="check system-audio capture is set up").set_defaults(
         func=cmd_audio_setup)
     subs.add_parser("sessions", help="list captured lectures").set_defaults(func=cmd_sessions)

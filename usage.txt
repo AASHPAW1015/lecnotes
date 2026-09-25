@@ -134,6 +134,22 @@
   After `listen`, everything is the same as a mic recording: same session,
   `lecnote redo <mode>` for other formats, `lecnote sessions` to find it.
 
+  JUST ONE APP  (no BlackHole needed)
+      lecnote apps                   which apps use audio; ♪ = playing now
+      lecnote listen --app firefox   record ONLY Firefox
+      lecnote toggle --app firefox   same, background / hotkey
+
+      LECNOTE_LISTEN_APP=firefox in ~/.lecnote/.env makes the Raycast Listen
+      command do this too.
+
+      The app keeps playing to your earphones, Music / notifications are left
+      out, volume keys keep working. Start before or after pressing play.
+      ~1.5% CPU, 15 MB.
+
+      Needs permission, or you get SILENCE (not an error):
+          System Settings > Privacy & Security > Screen & System Audio
+          Recording > System Audio Recording Only > + terminal and Raycast
+
   ONE-TIME SETUP
       brew install blackhole-2ch
       sudo killall coreaudiod        # drivers only appear after this

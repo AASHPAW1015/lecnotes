@@ -149,6 +149,33 @@ your speakers is what lets you still hear the lecture while it is captured.
 lecnote audio-setup       # says what is installed and what is still missing
 ```
 
+#### Just one app
+
+To record only one app — the lecture in Firefox, not Music or a notification —
+use `--app`. This uses a Core Audio process tap (macOS 14.2+) instead of
+BlackHole, so it needs no Multi-Output Device: the app keeps playing to your
+earphones as normal, other apps are left out, and the volume keys keep working.
+
+```bash
+lecnote apps                    # which apps are using audio; ♪ = playing now
+lecnote listen --app firefox    # record Firefox only
+lecnote toggle --app firefox    # same, as a background hotkey toggle
+```
+
+Put `LECNOTE_LISTEN_APP=firefox` in `~/.lecnote/.env` and the Raycast *Listen*
+command records that app instead of going through BlackHole. The name matches
+an app's bundle id or install path, so `chrome` also catches Chrome's helper
+processes, where browser audio actually plays from. Start recording before or
+after pressing play — an app's audio is picked up within half a second of it
+appearing.
+
+The capture is a small Swift helper, compiled on first use (Xcode command line
+tools) and cached in `~/.lecnote/bin`; about 1.5% CPU and 15 MB while running.
+macOS gives it **silence, not an error**, until the app that launches lecnote is
+allowed to record system audio: **System Settings > Privacy & Security > Screen
+& System Audio Recording > System Audio Recording Only**, and add your terminal
+and Raycast.
+
 While that Multi-Output Device is selected the volume keys stop working — a
 Core Audio limitation, not something lecnote can fix. So switching back is one
 command, and it remembers the real device you were on:

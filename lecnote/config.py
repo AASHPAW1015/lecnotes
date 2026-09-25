@@ -18,6 +18,10 @@ CHANNELS = 1  # what we write to disk; inputs are folded down to mono
 # macOS hands no app the system output mix, so capturing what the speakers play
 # needs a virtual device that the audio is routed into first. Names to look for,
 # most common first. Override with LECNOTE_SYSTEM_DEVICE for a different one.
+# Record just this app for system audio (`listen`, the Raycast Listen command)
+# instead of everything routed through the loopback device. Empty = loopback.
+LISTEN_APP = os.environ.get("LECNOTE_LISTEN_APP", "")
+
 LOOPBACK_HINTS = [h for h in [os.environ.get("LECNOTE_SYSTEM_DEVICE", "")] if h] or [
     "BlackHole", "Loopback Audio", "Soundflower", "Aggregate",
 ]

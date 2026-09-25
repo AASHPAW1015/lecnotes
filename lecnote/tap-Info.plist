@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.aashpaw.lecnote-tap</string>
+	<key>CFBundleName</key>
+	<string>lecnote-tap</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>lecnote records the audio of the app you choose so it can turn a lecture into notes.</string>
+</dict>
+</plist>

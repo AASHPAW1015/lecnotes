@@ -37,5 +37,9 @@ lecnote-excalidraw = "lecnote.cli:main"
 [tool.setuptools]
 packages = ["lecnote"]
 
+# The app-audio helper is compiled from source on first use.
+[tool.setuptools.package-data]
+lecnote = ["tap.swift", "tap-Info.plist"]
+
 [tool.setuptools.dynamic]
 version = { attr = "lecnote.__version__" }
