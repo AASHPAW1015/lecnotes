@@ -249,7 +249,7 @@ Raycast > Extensions > Script Commands > **Add Script Directory**, pointed at th
 | Toggle Audio Output | Capture routing ↔ normal sound |
 | Re-render | A captured lecture in another format |
 | Sessions | List captured lectures |
-| Status | Recording or idle |
+| Status | Recording, processing (and which stage), or idle — processing lasts until the notes are on the clipboard |
 
 Give *Toggle (Notion)* a hotkey such as ⌥⌘L. One press starts recording, the
 next stops it and puts the notes on your clipboard — that single key is the

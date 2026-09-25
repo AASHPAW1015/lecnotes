@@ -105,16 +105,70 @@ def _check_audio(wav: Path, session: Path, source: str = "mic") -> None:
     _write_meta(session, seconds=secs, peak=peak)
 
 
+class _Progress:
+    """Marker file saying this process is still turning a session into notes.
+
+    Removed only once the notes are on the clipboard, or on failure — so the
+    Raycast status line reads "processing" for exactly as long as it should.
+    """
+
+    def __init__(self, session: Path, mode: str):
+        config.PROCESSING.mkdir(parents=True, exist_ok=True)
+        self.path = config.PROCESSING / f"{os.getpid()}.json"
+        self.state = {"pid": os.getpid(), "session": str(session), "mode": mode,
+                      "started": time.time(), "stage": "starting"}
+
+    def stage(self, name: str) -> None:
+        self.state["stage"] = name
+        self.path.write_text(json.dumps(self.state), encoding="utf-8")
+
+    def __enter__(self):
+        self.stage("starting")
+        return self
+
+    def __exit__(self, *exc):
+        self.path.unlink(missing_ok=True)
+        return False
+
+
+def _processing_now() -> list[dict]:
+    """Every live processing job, clearing markers left by killed processes."""
+    if not config.PROCESSING.is_dir():
+        return []
+    jobs = []
+    for f in config.PROCESSING.glob("*.json"):
+        try:
+            state = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue  # being rewritten this instant; next refresh picks it up
+        if _alive(state.get("pid", -1)):
+            jobs.append(state)
+        else:
+            f.unlink(missing_ok=True)
+    return sorted(jobs, key=lambda s: s["started"])
+
+
 def _process(session: Path, mode: str, vocab: str, show: bool, keep: bool) -> int:
+    with _Progress(session, mode) as progress:
+        return _process_inner(session, mode, vocab, show, keep, progress)
+
+
+def _process_inner(session: Path, mode: str, vocab: str, show: bool, keep: bool,
+                   progress: "_Progress") -> int:
     from . import transcribe
 
     wav = session / "audio.wav"
     transcript_path = session / "transcript.txt"
 
     if not transcript_path.is_file():
-        audio = recorder.compress(wav) if wav.suffix == ".wav" and wav.is_file() else wav
+        if wav.suffix == ".wav" and wav.is_file():
+            progress.stage("compressing")
+            audio = recorder.compress(wav)
+        else:
+            audio = wav
         if not audio.is_file():
             raise SystemExit(f"error: no audio at {audio}")
+        progress.stage("transcribing")
         text = transcribe.run(audio, vocab)
         transcript_path.write_text(text, encoding="utf-8")
         words = len(text.split())
@@ -124,8 +178,10 @@ def _process(session: Path, mode: str, vocab: str, show: bool, keep: bool) -> in
     else:
         text = transcript_path.read_text(encoding="utf-8")
 
+    progress.stage("writing notes" if mode in ("notion", "obsidian") else "drawing diagrams")
     out = notes.generate(text, mode, vocab)
 
+    progress.stage("copying")
     suffix = {"excalidraw": "json", "png": "png"}.get(mode, "md")
     out_path = session / f"notes-{mode}.{suffix}"
     if isinstance(out, list):
@@ -438,12 +494,23 @@ def cmd_toggle(args) -> int:
     return cmd_start(args)
 
 
+def _elapsed(since: float) -> str:
+    secs = int(time.time() - since)
+    return f"{secs // 60}m{secs % 60:02d}s" if secs >= 60 else f"{secs}s"
+
+
 def cmd_status(args) -> int:  # noqa: ARG001
+    # One line only: Raycast's inline mode shows a single line, and a new
+    # recording can be running while the previous one is still processing.
+    parts = []
     state = _live_recording()
     if state:
-        elapsed = time.time() - state.get("started", time.time())
-        where = "  (foreground terminal)" if state.get("foreground") else ""
-        log(f"  ● recording  [{state['mode']}]  {elapsed:.0f}s  pid {state['pid']}{where}")
+        where = " (terminal)" if state.get("foreground") else ""
+        parts.append(f"● recording [{state['mode']}] {_elapsed(state['started'])}{where}")
+    for job in _processing_now():
+        parts.append(f"⏳ {job['stage']} [{job['mode']}] {_elapsed(job['started'])}")
+    if parts:
+        log("  " + "  ·  ".join(parts))
         return 0
     session = _last_session()
     log("  idle" + (f"   last: {session}" if session else ""))

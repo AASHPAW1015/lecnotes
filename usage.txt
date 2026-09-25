@@ -287,7 +287,9 @@
       Toggle Audio Output   capture routing <-> normal sound
       Re-render             a captured lecture in another format
       Sessions              list captured lectures
-      Status                recording or idle
+      Status                recording / processing (with stage) / idle
+                            — stays on "processing" until the notes are
+                            actually on your clipboard
 
   Give "Lecture Notes — Toggle (Notion)" a hotkey, e.g. Option+Cmd+L.
   One press starts recording, the next stops it and copies the notes.

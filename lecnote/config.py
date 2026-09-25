@@ -6,6 +6,9 @@ from pathlib import Path
 HOME = Path.home() / ".lecnote"
 SESSIONS = HOME / "sessions"
 CURRENT = HOME / "current.json"
+# One file per process turning audio into notes, so `status` can say what is
+# still in flight after the recording itself has stopped.
+PROCESSING = HOME / "processing"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Audio
