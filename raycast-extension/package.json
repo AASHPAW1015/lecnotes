@@ -1,6 +1,7 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "lecnote",
+  "version": "1.2.1",
   "title": "lecnote",
   "description": "Pick an app that is playing audio and turn what it plays into lecture notes.",
   "icon": "icon.png",
