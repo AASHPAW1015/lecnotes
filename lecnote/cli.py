@@ -75,7 +75,15 @@ def _alive(pid: int) -> bool:
 
 # --- pipeline -------------------------------------------------------------
 
-def _check_audio(wav: Path, session: Path) -> None:
+SYSTEM_SILENCE = (
+    "error: the system-audio capture was pure silence — nothing reached {dev}.\n"
+    "  Usual cause: the app playing the lecture picked its own speaker, which\n"
+    "  bypasses the Multi-Output Device. In Google Meet / Zoom, set the speaker\n"
+    "  to \"Multi-Output Device\" (Meet: ⋮ > Settings > Audio > Speakers).\n"
+    "  Check the routing with `lecnote audio-setup`.")
+
+
+def _check_audio(wav: Path, session: Path, source: str = "mic") -> None:
     stats_path = wav.with_suffix(".stats.json")
     peak = None
     if stats_path.is_file():
@@ -85,6 +93,10 @@ def _check_audio(wav: Path, session: Path) -> None:
     if secs < 1.0:
         raise SystemExit("error: recording is under a second — nothing to transcribe.")
     if peak is not None and peak < 0.001:
+        if source == "system":
+            dev = recorder.loopback_device()
+            raise SystemExit(SYSTEM_SILENCE.format(
+                dev=recorder.device_name(dev) if dev is not None else "the loopback device"))
         raise SystemExit(
             "error: the microphone recorded pure silence.\n"
             "  Grant your terminal microphone access:\n"
@@ -168,7 +180,29 @@ def _process(session: Path, mode: str, vocab: str, show: bool, keep: bool) -> in
 
 # --- commands -------------------------------------------------------------
 
+def _live_recording() -> dict | None:
+    """State of the recorder that is running right now, foreground or background."""
+    if not config.CURRENT.is_file():
+        return None
+    state = json.loads(config.CURRENT.read_text())
+    if _alive(state["pid"]):
+        return state
+    config.CURRENT.unlink(missing_ok=True)  # left behind by a crash or kill -9
+    return None
+
+
+def _refuse_if_recording() -> None:
+    """Two recorders at once means the second hides the first — Enter only
+    reaches whichever terminal you are typing in, and the other runs on."""
+    state = _live_recording()
+    if state:
+        kind = "in another terminal" if state.get("foreground") else "in the background"
+        raise SystemExit(f"error: already recording {kind} (pid {state['pid']}).\n"
+                         "  Stop it first with `lecnote stop`.")
+
+
 def cmd_run(args) -> int:
+    _refuse_if_recording()
     session = _new_session()
     wav = session / "audio.wav"
     device = _resolve_device(args)
@@ -178,6 +212,20 @@ def cmd_run(args) -> int:
     thread.start()
     time.sleep(0.3)
 
+    # `lecnote stop` from elsewhere arrives as SIGUSR1 and acts like Enter.
+    # Not SIGINT: a process started as a background job inherits SIGINT as
+    # ignored, and Python then never raises KeyboardInterrupt for it.
+    def _stop_requested(signum, frame):  # noqa: ARG001
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGUSR1, _stop_requested)
+
+    # Register like a background recording does, so `lecnote stop` and the
+    # Raycast toggle can find this one and a second start is refused.
+    config.CURRENT.write_text(json.dumps({
+        "session": str(session), "pid": os.getpid(), "mode": args.mode,
+        "vocab": args.vocab, "started": time.time(), "foreground": True,
+    }), encoding="utf-8")
+
     src = ("system audio via " + recorder.device_name(device)
            if getattr(args, "source", "mic") == "system" else "microphone")
     log(f"\n  ● listening to {src}  [{args.mode}]   press Enter to stop\n")
@@ -185,6 +233,8 @@ def cmd_run(args) -> int:
         input()
     except (KeyboardInterrupt, EOFError):
         log()
+    finally:
+        config.CURRENT.unlink(missing_ok=True)
     rec.stop()
     thread.join(timeout=10)
 
@@ -192,7 +242,7 @@ def cmd_run(args) -> int:
         json.dumps({"seconds": rec.seconds, "peak": rec.peak}), encoding="utf-8")
 
     log("  ■ stopped")
-    _check_audio(wav, session)
+    _check_audio(wav, session, getattr(args, "source", "mic"))
     return _process(session, args.mode, args.vocab, args.show, args.keep)
 
 
@@ -316,13 +366,7 @@ def cmd_audio_setup(args) -> int:  # noqa: ARG001
 
 
 def cmd_start(args) -> int:
-    if config.CURRENT.is_file():
-        state = json.loads(config.CURRENT.read_text())
-        if _alive(state["pid"]):
-            log(f"  already recording (pid {state['pid']}) — run `lecnote stop`")
-            return 1
-        config.CURRENT.unlink()
-
+    _refuse_if_recording()
     session = _new_session()
     wav = session / "audio.wav"
     device = _resolve_device(args)
@@ -342,6 +386,7 @@ def cmd_start(args) -> int:
     config.CURRENT.write_text(json.dumps({
         "session": str(session), "pid": proc.pid, "mode": args.mode,
         "vocab": args.vocab, "started": time.time(),
+        "source": getattr(args, "source", "mic"),
     }), encoding="utf-8")
     _write_meta(session, mode=args.mode, vocab=args.vocab)
 
@@ -350,11 +395,23 @@ def cmd_start(args) -> int:
 
 
 def cmd_stop(args) -> int:
-    if not config.CURRENT.is_file():
+    state = _live_recording()
+    if state is None:
         raise SystemExit("error: nothing is recording.")
-    state = json.loads(config.CURRENT.read_text())
     session = Path(state["session"])
     pid = state["pid"]
+
+    if state.get("foreground"):
+        # Same as pressing Enter over there: that process stops, transcribes
+        # and copies the notes itself, in its own terminal.
+        os.kill(pid, signal.SIGUSR1)
+        for _ in range(50):
+            if not config.CURRENT.is_file():
+                break
+            time.sleep(0.1)
+        log(f"  ■ stopped the recording in the other terminal (pid {pid}).")
+        log("  It is making the notes now — they land on the clipboard from there.")
+        return 0
 
     if _alive(pid):
         os.kill(pid, signal.SIGTERM)
@@ -369,31 +426,25 @@ def cmd_stop(args) -> int:
 
     mode = args.mode_override or state.get("mode", DEFAULT_MODE)
     vocab = args.vocab or state.get("vocab", "")
-    _check_audio(session / "audio.wav", session)
+    _check_audio(session / "audio.wav", session, state.get("source", "mic"))
     return _process(session, mode, vocab, args.show, args.keep)
 
 
 def cmd_toggle(args) -> int:
     """One command for both edges — bind it to a single hotkey."""
-    recording = False
-    if config.CURRENT.is_file():
-        state = json.loads(config.CURRENT.read_text())
-        recording = _alive(state["pid"])
-    if recording:
+    if _live_recording():
         args.mode_override = getattr(args, "mode", None)
         return cmd_stop(args)
     return cmd_start(args)
 
 
 def cmd_status(args) -> int:  # noqa: ARG001
-    if config.CURRENT.is_file():
-        state = json.loads(config.CURRENT.read_text())
-        if _alive(state["pid"]):
-            elapsed = time.time() - state.get("started", time.time())
-            log(f"  ● recording  [{state['mode']}]  {elapsed:.0f}s  pid {state['pid']}")
-            return 0
-        log("  stale session file; clearing")
-        config.CURRENT.unlink()
+    state = _live_recording()
+    if state:
+        elapsed = time.time() - state.get("started", time.time())
+        where = "  (foreground terminal)" if state.get("foreground") else ""
+        log(f"  ● recording  [{state['mode']}]  {elapsed:.0f}s  pid {state['pid']}{where}")
+        return 0
     session = _last_session()
     log("  idle" + (f"   last: {session}" if session else ""))
     return 0
