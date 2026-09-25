@@ -2,7 +2,7 @@
 // tap (macOS 14.2+). The app keeps playing to whatever output it uses; the tap
 // only listens. No virtual device, no rerouting, volume keys keep working.
 //
-//   lecnote-tap list                         audio clients the system knows about
+//   lecnote-tap list [--json]                audio clients the system knows about
 //   lecnote-tap record --app firefox --out audio.wav
 //
 // Writes 16 kHz mono 16-bit WAV — what the rest of lecnote expects — and, on
@@ -91,8 +91,16 @@ func matching(_ app: String) -> [AudioProcess] {
 
 // --- list -------------------------------------------------------------------
 
-func list() -> Never {
+func list(json: Bool) -> Never {
     let procs = audioProcesses().sorted { $0.path < $1.path }
+    if json {
+        let rows: [[String: Any]] = procs.filter { $0.pid != getpid() }.map {
+            ["pid": Int($0.pid), "bundle": $0.bundle, "path": $0.path, "playing": $0.playing]
+        }
+        let data = try! JSONSerialization.data(withJSONObject: rows)
+        print(String(data: data, encoding: .utf8)!)
+        exit(0)
+    }
     if procs.isEmpty { note("no audio clients registered right now") }
     for p in procs {
         let name = p.path.isEmpty ? "?" : URL(fileURLWithPath: p.path).lastPathComponent
@@ -293,7 +301,7 @@ func option(_ name: String) -> String? {
 
 switch args.first {
 case "list":
-    list()
+    list(json: args.contains("--json"))
 case "record":
     guard let app = option("--app"), let out = option("--out") else {
         fail("usage: lecnote-tap record --app NAME --out FILE.wav")

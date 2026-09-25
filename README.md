@@ -274,6 +274,7 @@ Raycast > Extensions > Script Commands > **Add Script Directory**, pointed at th
 | Toggle (Excalidraw) | Same, as a diagram scene |
 | Listen (System Audio) | Same rhythm, but records what the Mac is playing |
 | Toggle Audio Output | Capture routing ↔ normal sound |
+| **Listen to App** (extension) | Pick from the apps playing audio right now; records only that one |
 | Re-render | A captured lecture in another format |
 | Sessions | List captured lectures |
 | Status | Recording, processing (and which stage), or idle — processing lasts until the notes are on the clipboard |
@@ -281,6 +282,19 @@ Raycast > Extensions > Script Commands > **Add Script Directory**, pointed at th
 Give *Toggle (Notion)* a hotkey such as ⌥⌘L. One press starts recording, the
 next stops it and puts the notes on your clipboard — that single key is the
 whole tool during a lecture.
+
+**Listen to App** is a small Raycast extension in `raycast-extension/`, not a
+script command, because a script's dropdown is fixed while this list is live: it
+shows the apps using audio at that moment, playing ones first with their icons.
+Enter records that app only (⌘K for PNG or Excalidraw instead of Notion); while
+a recording runs, the list shows it with **Stop and Make Notes**, then the
+processing stage, and a failed run stays visible until dismissed. Install once:
+
+```bash
+cd raycast-extension && npm install && npm run dev   # Ctrl-C once it says ready
+```
+
+Raycast then asks for the path to `bin/lecnote` the first time you open it.
 
 The scripts locate the repo themselves, so nothing needs editing. Raycast needs
 its own microphone permission the first time — if a run reports silence, allow

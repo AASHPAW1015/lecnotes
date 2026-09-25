@@ -59,6 +59,46 @@ def list_apps() -> str:
     return (proc.stdout + proc.stderr).rstrip()
 
 
+def _app_of(path: str) -> str | None:
+    """The user-facing app a process belongs to: the outermost *.app bundle.
+
+    Browser audio comes from helpers nested inside the app bundle, so this is
+    what folds Firefox's plugin-container into one "Firefox" entry.
+    """
+    for part in path.split("/"):
+        if part.endswith(".app"):
+            return part[:-4]
+    return None
+
+
+def apps() -> list[dict]:
+    """Apps that can be recorded, playing ones first — for pickers like Raycast.
+
+    Background daemons and system services are left out: nobody records a
+    lecture from coreaudiod. /System/Applications stays, since Music lives there.
+    """
+    proc = subprocess.run([str(binary()), "list", "--json"],
+                          capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise SystemExit("error: could not list audio apps: " + proc.stderr.strip())
+    grouped: dict[str, dict] = {}
+    for row in json.loads(proc.stdout or "[]"):
+        path = row.get("path", "")
+        if path.startswith(("/System/Library/", "/usr/", "/Library/Apple/", "/Library/Audio/")):
+            continue
+        name = _app_of(path)
+        if not name:
+            continue
+        entry = grouped.setdefault(name, {"name": name, "playing": False,
+                                          "bundle": row.get("bundle", ""), "path": path})
+        entry["playing"] = entry["playing"] or bool(row.get("playing"))
+        # Prefer the main app's own bundle id and path over a helper's; helpers
+        # sit in a second, nested .app.
+        if path.count(".app/") == 1:
+            entry["bundle"], entry["path"] = row.get("bundle", ""), path
+    return sorted(grouped.values(), key=lambda a: (not a["playing"], a["name"].lower()))
+
+
 def record_argv(app: str, wav: Path) -> list[str]:
     return [str(binary()), "record", "--app", app, "--out", str(wav)]
 

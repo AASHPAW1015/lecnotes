@@ -1,0 +1,42 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "lecnote",
+  "title": "lecnote",
+  "description": "Pick an app that is playing audio and turn what it plays into lecture notes.",
+  "icon": "icon.png",
+  "author": "aashpaw",
+  "categories": ["Productivity"],
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "listen-app",
+      "title": "Listen to App",
+      "subtitle": "lecnote",
+      "description": "Choose an app playing audio and record only that app; run again to stop and get notes.",
+      "mode": "view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "lecnotePath",
+      "title": "lecnote command",
+      "description": "Full path to lecnote — bin/lecnote in the repo, or the pip-installed command.",
+      "type": "textfield",
+      "required": true,
+      "placeholder": "/Users/you/lecnotes/bin/lecnote"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^2.5.1",
+    "@raycast/utils": "^2.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.6.0"
+  },
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop"
+  }
+}

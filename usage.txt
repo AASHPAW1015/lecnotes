@@ -301,11 +301,19 @@
       Toggle (Excalidraw)   same, as a diagram scene
       Listen (System Audio) same rhythm, records what the Mac is playing
       Toggle Audio Output   capture routing <-> normal sound
+      Listen to App         (extension) pick a playing app, record only it
       Re-render             a captured lecture in another format
       Sessions              list captured lectures
       Status                recording / processing (with stage) / idle
                             — stays on "processing" until the notes are
                             actually on your clipboard
+
+  LISTEN TO APP (extension, lives in raycast-extension/)
+      Live list of apps using audio, playing ones first. Enter = record that
+      app only. Open it again while recording: Stop and Make Notes, then it
+      shows the processing stage. Install once:
+          cd raycast-extension && npm install && npm run dev   (Ctrl-C at "ready")
+      First open asks for the path to bin/lecnote.
 
   Give "Lecture Notes — Toggle (Notion)" a hotkey, e.g. Option+Cmd+L.
   One press starts recording, the next stops it and copies the notes.

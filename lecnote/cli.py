@@ -420,8 +420,11 @@ def cmd_output(args) -> int:
     return 0
 
 
-def cmd_apps(args) -> int:  # noqa: ARG001
+def cmd_apps(args) -> int:
     """Apps the audio system knows about, for choosing a --app name."""
+    if args.json:
+        print(json.dumps(apptap.apps()))
+        return 0
     log(apptap.list_apps())
     log("\n  ♪ = playing now.  Record one with:  lecnote listen --app firefox")
     return 0
@@ -535,7 +538,20 @@ def _elapsed(since: float) -> str:
     return f"{secs // 60}m{secs % 60:02d}s" if secs >= 60 else f"{secs}s"
 
 
-def cmd_status(args) -> int:  # noqa: ARG001
+def cmd_status(args) -> int:
+    if getattr(args, "json", False):
+        # For the Raycast extension: everything it needs to draw its list.
+        state = _live_recording()
+        print(json.dumps({
+            "recording": state and {
+                "mode": state["mode"], "source": state.get("source", "mic"),
+                "foreground": bool(state.get("foreground")),
+                "elapsed": time.time() - state["started"],
+            },
+            "processing": [{"stage": j["stage"], "mode": j["mode"],
+                            "elapsed": time.time() - j["started"]} for j in _processing_now()],
+        }))
+        return 0
     # One line only: Raycast's inline mode shows a single line, and a new
     # recording can be running while the previous one is still processing.
     parts = []
@@ -867,12 +883,15 @@ def build_parser(default_mode: str) -> argparse.ArgumentParser:
     out.add_argument("--show", action="store_true", help="print the current output, do not change it")
     out.set_defaults(func=cmd_output)
 
-    subs.add_parser("apps", help="list apps whose audio can be recorded").set_defaults(
-        func=cmd_apps)
+    ap = subs.add_parser("apps", help="list apps whose audio can be recorded")
+    ap.add_argument("--json", action="store_true", help="machine-readable, grouped by app")
+    ap.set_defaults(func=cmd_apps)
     subs.add_parser("audio-setup", help="check system-audio capture is set up").set_defaults(
         func=cmd_audio_setup)
     subs.add_parser("sessions", help="list captured lectures").set_defaults(func=cmd_sessions)
-    subs.add_parser("status", help="is anything recording?").set_defaults(func=cmd_status)
+    stp = subs.add_parser("status", help="is anything recording or processing?")
+    stp.add_argument("--json", action="store_true", help="machine-readable")
+    stp.set_defaults(func=cmd_status)
     tr = subs.add_parser("transcript", help="print a raw transcript")
     tr.add_argument("--session", default=None, help="which lecture (see `lecnote sessions`)")
     tr.set_defaults(func=cmd_transcript)
