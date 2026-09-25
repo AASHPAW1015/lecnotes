@@ -24,6 +24,7 @@ const run = promisify(execFile);
 // detached with its output here; a failure is then shown the next time the
 // list opens instead of vanishing.
 const STOP_LOG = join(homedir(), ".lecnote", "raycast-stop.log");
+const START_LOG = join(homedir(), ".lecnote", "raycast-start.log");
 
 type AudioApp = { name: string; playing: boolean; bundle: string; path: string };
 type Status = {
@@ -73,18 +74,38 @@ function lastFailure(): string | undefined {
   return error ? error.slice(6).trim() : undefined;
 }
 
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 async function startRecording(app: AudioApp, mode: Mode) {
   const toast = await showToast({ style: Toast.Style.Animated, title: `Starting ${app.name}…` });
-  try {
-    await run(lecnote(), ["start", "--app", app.name, mode], { timeout: 120_000 });
-    if (existsSync(STOP_LOG)) unlinkSync(STOP_LOG); // a new run supersedes the old failure
-    await closeMainWindow();
-    await showHUD(`● Recording ${app.name} only${mode === "notion" ? "" : ` → ${mode}`}`);
-  } catch (error) {
-    toast.style = Toast.Style.Failure;
-    toast.title = `Could not start ${app.name}`;
-    toast.message = errorText(error);
+  // Launched detached and confirmed through `status`, rather than awaited:
+  // under Raycast, awaiting `lecnote start` could hang even though the
+  // recording had started, leaving this toast spinning over a live recorder.
+  const out = openSync(START_LOG, "w");
+  const child = spawn(lecnote(), ["start", "--app", app.name, mode], {
+    detached: true,
+    stdio: ["ignore", out, out],
+  });
+  let exitCode: number | null | undefined;
+  child.on("exit", (code) => (exitCode = code));
+  child.unref();
+
+  const deadline = Date.now() + 30_000; // first use also builds the capture helper
+  while (Date.now() < deadline) {
+    await sleep(400);
+    if (exitCode !== undefined && exitCode !== 0) break;
+    const status = await lecnoteJSON<Status>("status", "--json").catch(() => undefined);
+    if (status?.recording) {
+      if (existsSync(STOP_LOG)) unlinkSync(STOP_LOG); // a new run supersedes the old failure
+      await closeMainWindow();
+      await showHUD(`● Recording ${app.name} only${mode === "notion" ? "" : ` → ${mode}`}`);
+      return;
+    }
   }
+  const log = existsSync(START_LOG) ? readFileSync(START_LOG, "utf8") : "";
+  toast.style = Toast.Style.Failure;
+  toast.title = `Could not start ${app.name}`;
+  toast.message = errorText({ stderr: log }) || "it did not start within 30 seconds";
 }
 
 async function stopRecording() {
